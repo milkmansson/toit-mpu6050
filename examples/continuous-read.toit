@@ -27,14 +27,22 @@ main:
   driver := Mpu6050 device
 
   print " get-whoami returned: 0x$(%02x driver.get-whoami)"
-  print " get-temperature returned: $(%0.2f driver.read-temperature)c"
+  print " get-temperature returned: $(%0.3f driver.read-temperature)c"
 
   print " execute-gyro-self-test now:"
   driver.execute-gyro-selftest-x
   driver.execute-gyro-selftest-y
   driver.execute-gyro-selftest-z
 
+  gyro := ""
+  accel := ""
+  new-gyro := ?
+  new-accel := ?
+
   300.repeat:
-    new := driver.read-gyro
-    print " read-gyro returned: $(%0.2f new.x)x $(%0.2f new.y)y $(%0.2f new.z)z"
+    new-gyro = driver.read-gyroscope
+    new-accel = driver.read-acceleration
+    gyro = " read-gyro returned: $(%0.2f new-gyro.x)x $(%0.2f new-gyro.y)y $(%0.2f new-gyro.z)z"
+    accel = " read-accel returned: $(%0.2f new-accel.x)x.g $(%0.2f new-accel.y)y.g $(%0.2f new-accel.z)z.g"
+    print "$gyro $accel"
     sleep --ms=100

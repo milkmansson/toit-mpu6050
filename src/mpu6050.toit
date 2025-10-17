@@ -22,19 +22,27 @@ class Mpu6050:
   static REG-ACCEL-YOUT_ ::= 0x3d
   static REG-ACCEL-ZOUT_ ::= 0x3f
   static REG-ACCEL-CONFIG_ ::= 0x1c
-  static ACCEL-FS-SELECT-MASK_  ::= 0b00011000
   static ACCEL-X-SELFTEST-MASK_ ::= 0b10000000
   static ACCEL-Y-SELFTEST-MASK_ ::= 0b01000000
   static ACCEL-Z-SELFTEST-MASK_ ::= 0b00100000
+  static ACCEL-FS-SELECT-MASK_  ::= 0b00011000
+  static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-65-5  ::= 1  // 131 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-32-8  ::= 2  // 131 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-16-4  ::= 3  // 131 LSB/deg/s  +/- 250deg/s
 
   static REG-GYRO-XOUT_ ::= 0x43
   static REG-GYRO-YOUT_ ::= 0x45
   static REG-GYRO-ZOUT_ ::= 0x47
   static REG-GYRO-CONFIG_ ::= 0x1b
-  static GYRO-FS-SELECT-MASK_ ::= 0b00011000
   static GYRO-X-SELFTEST-MASK_ ::= 0b10000000
   static GYRO-Y-SELFTEST-MASK_ ::= 0b01000000
   static GYRO-Z-SELFTEST-MASK_ ::= 0b00100000
+  static GYRO-FS-SELECT-MASK_ ::= 0b00011000
+  static ACCEL-FS-16384 ::= 0  // 16384 LSB/g  +/- 2g
+  static ACCEL-FS-8192  ::= 1  // 8192 LSB/g  +/- 4g
+  static ACCEL-FS-4096  ::= 2  // 4096 LSB/g  +/- 8g
+  static ACCEL-FS-2048  ::= 3  // 2048 LSB/g  +/- 16g
 
   // Temperature
   static REG-TEMP_ ::= 0x41
@@ -85,19 +93,26 @@ class Mpu6050:
     // Reset: Destabilises I2C bus - ignoring for now.
     sleep --ms=100  // Sleep 100ms to stabilize.
 
-    // Init: Device is asleep at power on
+    // Init: Device is asleep at power on, returning 0 for all values
     wakeup-now
     reset-gyro
     reset-temp
     reset-accel
     enable-temperature
     set-clock-source
+    set-accel-fs ACCEL-FS-16384
+    set-gyro-fs GYRO-FS-131-0
+
 
   /**
   Resets the device.
+
+  Note: I2C bus may become unstable, as the device seems to reset and does not
+  seem to quite complete the I2C transaction
   */
   reset -> none:
     write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-DEVICE-RESET-MASK_ --width=16
+    sleep --ms=200
 
   /**
   Resets Gyroscope Signal Path.
@@ -161,19 +176,18 @@ class Mpu6050:
   /**
   Reads acceleration at this moment.
 
-  Each 16-bit accelerometer measurement has a full scale defined in ACCEL_FS
-  (Register 28). For each full scale setting, the accelerometers’ sensitivity
-  per LSB in ACCEL_xOUT is shown in the table below.
-  AFS_SEL Full Scale Range LSB Sensitivity
-  - 0 ±2g 16384 LSB/g
-  - 1 ±4g 8192 LSB/g
-  - 2 ±8g 4096 LSB/g
-  - 3 ±16g 2048 LSB/g
-
+  Each 16-bit accelerometer measurement has a full scale defined in
+  $ACCEL-FS-SELECT-MASK_ in register $REG-ACCEL-CONFIG_. For each full scale
+  setting, the accelerometers’ sensitivity changes per LSB:
+  SELECTION | Full Scale Range LSB Sensitivity
+  - 0 | ±2g 16384 LSB/g
+  - 1 | ±4g 8192 LSB/g
+  - 2 | ±8g 4096 LSB/g
+  - 3 | ±16g 2048 LSB/g
   */
   read-acceleration -> math.Point3f:
-    a-fs := get-accel-fs
-    a-lsb := convert-accel-fs-to-scale_ a-fs
+    a-fs := get-accel-fs   // Obtain range configuration
+    a-lsb := convert-accel-fs-to-scale_ a-fs  // Obtain multiplier
     a-x := (read-register_ REG-ACCEL-XOUT_ --signed) * a-lsb
     a-y := (read-register_ REG-ACCEL-YOUT_ --signed) * a-lsb
     a-z := (read-register_ REG-ACCEL-ZOUT_ --signed) * a-lsb
@@ -185,14 +199,29 @@ class Mpu6050:
   get-accel-fs -> int:
     return read-register_ REG-ACCEL-CONFIG_ --mask=ACCEL-FS-SELECT-MASK_ --width=8
 
+  /**
+  Sets Accelerometer scale values from the register.
+  */
+  set-accel-fs raw/int -> none:
+    assert: 0 <= raw <= 3
+    write-register_ REG-ACCEL-CONFIG_ raw --mask=ACCEL-FS-SELECT-MASK_ --width=8
+
+  /**
+  Converts Accelerometer scale selectors to actual values/multipliers.
+  */
   convert-accel-fs-to-scale_ value/int -> int:
     // AFS_SEL Full Scale Range LSB Sensitivity
     assert: 0 <= value <= 3
-    if value == 0: return 16384 // ±2g 16384 LSB/g
-    if value == 1: return 8192  // ±4g 8192 LSB/g
-    if value == 2: return 4096  // ±8g 4096 LSB/g
-    if value == 3: return 2048  // ±16g 2048 LSB/g
+    if value == ACCEL-FS-16384: return 16384 // ±2g 16384 LSB/g
+    if value == ACCEL-FS-8192:  return 8192  // ±4g 8192 LSB/g
+    if value == ACCEL-FS-4096:  return 4096  // ±8g 4096 LSB/g
+    if value == ACCEL-FS-2048:  return 2048  // ±16g 2048 LSB/g
     return 0
+
+  execute-accel-selftest -> none:
+    execute-accel-selftest-x
+    execute-accel-selftest-y
+    execute-accel-selftest-z
 
   execute-accel-selftest-x -> none:
     write-register_ REG-ACCEL-CONFIG_ 1 --mask=ACCEL-X-SELFTEST-MASK_ --width=8
@@ -203,23 +232,21 @@ class Mpu6050:
   execute-accel-selftest-z -> none:
     write-register_ REG-ACCEL-CONFIG_ 1 --mask=ACCEL-Z-SELFTEST-MASK_ --width=8
 
-
-
   /**
   Reads gyroscopic orientation at this moment.
 
   Each 16-bit gyroscope measurement has a full scale defined in FS_SEL (Register
   27). For each full scale setting, the gyroscopes’ sensitivity per LSB in GYRO
   xOUT is shown in the table below:
-  FS_SEL Full Scale Range LSB Sensitivity
-  - 0 ± 250 °/s 131 LSB/°/s
-  - 1 ± 500 °/s 65.5 LSB/°/s
-  - 2 ± 1000 °/s 32.8 LSB/°/s
-  - 3 ± 2000 °/s 16.4 LSB/°/s
+  SELECTION | Full Scale Range LSB Sensitivity
+  - 0 | ± 250 °/s 131 LSB/°/s
+  - 1 | ± 500 °/s 65.5 LSB/°/s
+  - 2 | ± 1000 °/s 32.8 LSB/°/s
+  - 3 | ± 2000 °/s 16.4 LSB/°/s
   */
-  read-gyro -> math.Point3f:
-    g-fs := get-gyro-fs
-    g-lsb := convert-gyro-fs-to-scale_ g-fs
+  read-gyroscope -> math.Point3f:
+    g-fs := get-gyro-fs   // Obtain range configuration
+    g-lsb := convert-gyro-fs-to-scale_ g-fs   // Obtain multiplier
     g-x := (read-register_ REG-GYRO-XOUT_ --signed) / g-lsb
     g-y := (read-register_ REG-GYRO-YOUT_ --signed) / g-lsb
     g-z := (read-register_ REG-GYRO-ZOUT_ --signed) / g-lsb
@@ -231,14 +258,29 @@ class Mpu6050:
   get-gyro-fs -> int:
     return read-register_ REG-GYRO-CONFIG_ --mask=GYRO-FS-SELECT-MASK_ --width=8
 
+  /**
+  Sets Gyroscope scale values from the register.
+  */
+  set-gyro-fs raw/int -> none:
+    assert: 0 <= raw <= 3
+    write-register_ REG-GYRO-CONFIG_ raw --mask=GYRO-FS-SELECT-MASK_ --width=8
+
+  /**
+  Converts Gyroscope scale selectors to actual values/multipliers.
+  */
   convert-gyro-fs-to-scale_ value/int -> float:
     // AFS_SEL Full Scale Range LSB Sensitivity
     assert: 0 <= value <= 3
-    if value == 0: return 131.0 // ± 250  °/s 131 LSB/°/s
-    if value == 1: return 65.5  // ± 500  °/s 65.5 LSB/°/s
-    if value == 2: return 32.8  // ± 1000 °/s 32.8 LSB/°/s
-    if value == 3: return 16.4  // ± 2000 °/s 16.4 LSB/°/s
+    if value == GYRO-FS-131-0: return 131.0 // ± 250  °/s 131 LSB/°/s
+    if value == GYRO-FS-65-5:  return 65.5  // ± 500  °/s 65.5 LSB/°/s
+    if value == GYRO-FS-32-8:  return 32.8  // ± 1000 °/s 32.8 LSB/°/s
+    if value == GYRO-FS-16-4:  return 16.4  // ± 2000 °/s 16.4 LSB/°/s
     return 0.0
+
+  execute-gyro-selftest -> none:
+    execute-gyro-selftest-x
+    execute-gyro-selftest-y
+    execute-gyro-selftest-z
 
   execute-gyro-selftest-x -> none:
     write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-X-SELFTEST-MASK_ --width=8
@@ -261,6 +303,10 @@ class Mpu6050:
   get-whoami -> int:
     return read-register_ REG-WHO-AM-I_ --mask=REG-WHO-AM-I-MASK_ --width=8
 
+
+  /**
+  Reads and optionally masks/parses register data
+  */
   read-register_
       register/int
       --mask/int?=null
@@ -295,6 +341,9 @@ class Mpu6050:
       masked-value := (register-value & mask) >> offset
       return masked-value
 
+  /**
+  Writes register data (masked or full register writes)
+  */
   write-register_
       register/int
       value/any
