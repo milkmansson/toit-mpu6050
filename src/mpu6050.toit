@@ -158,45 +158,6 @@ class Mpu6050:
     write-register_ REG-POWER-MANAGEMENT_ source --mask=PM-CLOCK-SOURCE-MASK_ --width=16
 
 
-
-
-
-
-  /**
-  Initializes the device.
-
-  init:
-    reg_.write_u8 PWR_MGMT_1_     0x00
-    sleep --ms=10
-    reg_.write_u8 PWR_MGMT_1_     0x01 << 7
-    sleep --ms=10
-    reg_.write_u8 PWR_MGMT_1_     0x01
-    sleep --ms=10
-    reg_.write_u8 ACCEL_CONFIG_1_ 0x10  // +- 8G
-    sleep --ms=10
-    reg_.write_u8 GYRO_CONFIG_    0x18  // +- 2000dps
-    sleep --ms=10
-    reg_.write_u8 CONFIG_         0x01
-    sleep --ms=10
-    reg_.write_u8 SMPLRT_DIV_     0x05
-    sleep --ms=10
-    reg_.write_u8 INT_ENABLE_     0x00
-    sleep --ms=10
-    reg_.write_u8 ACCEL_CONFIG_2_  0X00
-    sleep --ms=10
-    reg_.write_u8 USER_CTRL_      0x00
-    sleep --ms=10
-    reg_.write_u8 FIFO_EN_        0x00
-    sleep --ms=10
-    reg_.write_u8 INT_PIN_CFG_    0x22
-    sleep --ms=10
-    reg_.write_u8 INT_ENABLE_     0x01
-    sleep --ms=100
-   */
-
-
-
-
   /**
   Reads acceleration at this moment.
 
@@ -241,18 +202,6 @@ class Mpu6050:
 
   execute-accel-selftest-z -> none:
     write-register_ REG-ACCEL-CONFIG_ 1 --mask=ACCEL-Z-SELFTEST-MASK_ --width=8
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -304,14 +253,6 @@ class Mpu6050:
     raw := read-register_ REG-TEMP_ --signed
     return ((raw.to-float / TEMP-SO_) + TEMP-OFFSET_)
 
-
-
-
-
-
-
-
-
   /**
   Returns the value of the WHO_AM_I register.
 
@@ -319,7 +260,6 @@ class Mpu6050:
   */
   get-whoami -> int:
     return read-register_ REG-WHO-AM-I_ --mask=REG-WHO-AM-I-MASK_ --width=8
-
 
   read-register_
       register/int
