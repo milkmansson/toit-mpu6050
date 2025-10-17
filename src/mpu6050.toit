@@ -13,10 +13,11 @@ import serial.registers as registers
 class Mpu6050:
   /**  Default $I2C-ADDRESS is 0x36  */
   static I2C-ADDRESS ::= 0x68
+  static I2C-ADDRESS-AD0-0 ::= 0x68
+  static I2C-ADDRESS-AD0-1 ::= 0x69
   static MPU-6050-WHOAMI ::= 0x34
 
   static DEFAULT-REGISTER-WIDTH_ ::= 16 // bits
-
 
   static REG-ACCEL-XOUT_ ::= 0x3b
   static REG-ACCEL-YOUT_ ::= 0x3d
@@ -27,9 +28,9 @@ class Mpu6050:
   static ACCEL-Z-SELFTEST-MASK_ ::= 0b00100000
   static ACCEL-FS-SELECT-MASK_  ::= 0b00011000
   static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-65-5  ::= 1  // 131 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-32-8  ::= 2  // 131 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-16-4  ::= 3  // 131 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-16-4  ::= 3  // 16.4 LSB/deg/s  +/- 250deg/s
 
   static REG-GYRO-XOUT_ ::= 0x43
   static REG-GYRO-YOUT_ ::= 0x45
@@ -39,10 +40,10 @@ class Mpu6050:
   static GYRO-Y-SELFTEST-MASK_ ::= 0b01000000
   static GYRO-Z-SELFTEST-MASK_ ::= 0b00100000
   static GYRO-FS-SELECT-MASK_ ::= 0b00011000
-  static ACCEL-FS-16384 ::= 0  // 16384 LSB/g  +/- 2g
-  static ACCEL-FS-8192  ::= 1  // 8192 LSB/g  +/- 4g
-  static ACCEL-FS-4096  ::= 2  // 4096 LSB/g  +/- 8g
-  static ACCEL-FS-2048  ::= 3  // 2048 LSB/g  +/- 16g
+  static ACCEL-FS-RANGE-2G  ::= 0  // 16384 LSB/g  +/- 2g
+  static ACCEL-FS-RANGE-4G  ::= 1  // 8192 LSB/g  +/- 4g
+  static ACCEL-FS-RANGE-8G  ::= 2  // 4096 LSB/g  +/- 8g
+  static ACCEL-FS-RANGE-16G ::= 3  // 2048 LSB/g  +/- 16g
 
   // Temperature
   static REG-TEMP_ ::= 0x41
@@ -73,6 +74,32 @@ class Mpu6050:
   static SIGNAL-PATH-ACCEL-RESET-MASK_ ::= 0b00000010
   static SIGNAL-PATH-TEMP-RESET-MASK_  ::= 0b00000001
 
+  // Interrupts
+  static REG-INTRPT-ENABLE_       ::= 0x38
+  static INTRPT-DATA-READY-MASK_    ::= 0b00000001
+  static INTRPT-I2C-MASTER-SOURCES_ ::= 0b00001000
+  static INTRPT-FIFO-OVERFLOW_      ::= 0b00010000
+
+  static REG-INTRPT-PIN-CONFIG_ ::= 0x37
+  static INTRPT-PIN-ACTIVE-HL_       ::= 0b10000000  // 0 active high or 1 active low
+  static INTRPT-PIN-PUSH-OPEN_       ::= 0b01000000  // 0 Push Pull or 1 Open Drain
+  static INTRPT-PIN-LATCH_           ::= 0b00100000  // 0 50us pulse or 1 latch
+  static INTRPT-READ-CLEAR_          ::= 0b00010000  // 0 manual clearing or 1 reads clear int
+  static INTRPT-FSYNC-PIN-ACTIVE-HL_ ::= 0b00001000
+  static INTRPT-FSYNC-PIN-ENABLE_    ::= 0b00000100
+  static INTRPT-I2C-BYPASS-ENABLE_   ::= 0b00000010
+
+
+  // Undocumented
+  static MOT-DETECT-THR_      ::= 0x1F  // Motion detection threshold bits [7:0]
+  static MOT-DETECT-DURATION_ ::= 0x20  // Duration counter threshold for motion interrupt generation, 1 kHz rate, LSB = 1 ms
+  static MOT-DETECT_CTRL_     ::= 0x69
+
+
+  // Experimental
+  static deg_/float ::= (180.0 / math.PI)
+  static eps_/float ::= 1e-9
+
   // Globals
   reg_/registers.Registers := ?
   logger_/log.Logger := ?
@@ -100,7 +127,7 @@ class Mpu6050:
     reset-accel
     enable-temperature
     set-clock-source
-    set-accel-fs ACCEL-FS-16384
+    set-accel-fs ACCEL-FS-RANGE-8G  // Set accelerometer range to +/- 8g
     set-gyro-fs GYRO-FS-131-0
 
 
@@ -194,6 +221,15 @@ class Mpu6050:
     return math.Point3f a-x a-y a-z
 
   /**
+  Reads acceleration at this moment, returning raw register reads.
+  */
+  read-raw-acceleration -> math.Point3f:
+    a-x := read-register_ REG-ACCEL-XOUT_ --signed
+    a-y := read-register_ REG-ACCEL-YOUT_ --signed
+    a-z := read-register_ REG-ACCEL-ZOUT_ --signed
+    return math.Point3f a-x a-y a-z
+
+  /**
   Gets Accelerometer scale value from the register.
   */
   get-accel-fs -> int:
@@ -212,10 +248,10 @@ class Mpu6050:
   convert-accel-fs-to-scale_ value/int -> int:
     // AFS_SEL Full Scale Range LSB Sensitivity
     assert: 0 <= value <= 3
-    if value == ACCEL-FS-16384: return 16384 // ±2g 16384 LSB/g
-    if value == ACCEL-FS-8192:  return 8192  // ±4g 8192 LSB/g
-    if value == ACCEL-FS-4096:  return 4096  // ±8g 4096 LSB/g
-    if value == ACCEL-FS-2048:  return 2048  // ±16g 2048 LSB/g
+    if value == ACCEL-FS-RANGE-2G: return 16384 // ±2g 16384 LSB/g
+    if value == ACCEL-FS-RANGE-4G: return 8192  // ±4g 8192 LSB/g
+    if value == ACCEL-FS-RANGE-8G: return 4096  // ±8g 4096 LSB/g
+    if value == ACCEL-FS-RANGE-16G: return 2048  // ±16g 2048 LSB/g
     return 0
 
   execute-accel-selftest -> none:
@@ -231,6 +267,120 @@ class Mpu6050:
 
   execute-accel-selftest-z -> none:
     write-register_ REG-ACCEL-CONFIG_ 1 --mask=ACCEL-Z-SELFTEST-MASK_ --width=8
+
+  enable-accelerometer -> none:
+    enable-accelerometer-x
+    enable-accelerometer-y
+    enable-accelerometer-z
+
+  disable-accelerometer -> none:
+    disable-accelerometer-x
+    disable-accelerometer-y
+    disable-accelerometer-z
+
+  enable-accelerometer-x -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-ACCEL-X-MASK_
+
+  enable-accelerometer-y -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-ACCEL-Y-MASK_
+
+  enable-accelerometer-z -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-ACCEL-Z-MASK_
+
+  disable-accelerometer-x -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-ACCEL-X-MASK_
+
+  disable-accelerometer-y -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-ACCEL-Y-MASK_
+
+  disable-accelerometer-z -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-ACCEL-Z-MASK_
+
+  /**
+  Sets Interrupts
+  */
+  enable-data-ready-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-DATA-READY-MASK_ --width=8
+
+  disable-data-ready-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-DATA-READY-MASK_ --width=8
+
+  enable-i2c-master-sources-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-I2C-MASTER-SOURCES_ --width=8
+
+  disable-i2c-master-sources-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-I2C-MASTER-SOURCES_ --width=8
+
+  enable-fifo-overflow-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-FIFO-OVERFLOW_ --width=8
+
+  disable-fifo-overflow-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-FIFO-OVERFLOW_ --width=8
+
+  set-interrupt-pin-active-high -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-ACTIVE-HL_ --width=8
+
+  set-interrupt-pin-active-low -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-ACTIVE-HL_ --width=8
+
+  set-interrupt-pin-push-pull -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-PUSH-OPEN_ --width=8
+
+  set-interrupt-pin-open-drain -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-PUSH-OPEN_ --width=8
+
+  set-interrupt-pin-manual-clear -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-READ-CLEAR_ --width=8
+
+  set-interrupt-pin-read-clears -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-READ-CLEAR_ --width=8
+
+  set-interrupt-fsync-pin-active-high -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL_ --width=8
+
+  set-interrupt-fsync-pin-active-low -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL_ --width=8
+
+  enable-fsync-pin -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ENABLE_ --width=8
+
+  disable-fsync-pin -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ENABLE_ --width=8
+
+  /**
+  Enables I2C bypass.
+
+  When this is enabled (and I2C_MST_EN (Register 106 bit[5]) is equal to 0) the
+   host application processor will be able to directly access the auxiliary I2C
+   bus of the MPU-60X0.
+  */
+  enable-i2c-bypass -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-I2C-BYPASS-ENABLE_ --width=8
+
+  /**
+  Disables I2C bypass.
+
+  When this is not enabled, the host application processor will not be able to
+  directly access the auxiliary I2C bus of the MPU-60X0 regardless of the state
+  of I2C_MST_EN (Register 106 bit[5]).
+  */
+  disable-i2c-bypass -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-I2C-BYPASS-ENABLE_ --width=8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   /**
   Reads gyroscopic orientation at this moment.
@@ -295,6 +445,34 @@ class Mpu6050:
     raw := read-register_ REG-TEMP_ --signed
     return ((raw.to-float / TEMP-SO_) + TEMP-OFFSET_)
 
+  enable-gyroscope -> none:
+    enable-gyroscope-x
+    enable-gyroscope-y
+    enable-gyroscope-z
+
+  disable-gyroscope -> none:
+    disable-gyroscope-x
+    disable-gyroscope-y
+    disable-gyroscope-z
+
+  enable-gyroscope-x -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-GYRO-X-MASK_
+
+  enable-gyroscope-y -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-GYRO-Y-MASK_
+
+  enable-gyroscope-z -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-STBY-GYRO-Z-MASK_
+
+  disable-gyroscope-x -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-GYRO-X-MASK_
+
+  disable-gyroscope-y -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-GYRO-Y-MASK_
+
+  disable-gyroscope-z -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-STBY-GYRO-Z-MASK_
+
   /**
   Returns the value of the WHO_AM_I register.
 
@@ -303,6 +481,83 @@ class Mpu6050:
   get-whoami -> int:
     return read-register_ REG-WHO-AM-I_ --mask=REG-WHO-AM-I-MASK_ --width=8
 
+
+  /** EXPERIMENTAL */
+
+  /**
+  Returns the vector calculation: a magnitude and a heading in 3d space
+  */
+  read-acceleration-vector -> AccelOrientation:
+    // Get new reading
+    accel := read-acceleration
+
+    // Magnitude (|accel| in g)
+    magnitude/float := math.sqrt (accel.x * accel.x + accel.y * accel.y + accel.z * accel.z)
+
+    // Pitch
+    den-pitch/float := (math.sqrt (accel.y*accel.y + accel.z*accel.z)) + eps_
+    pitch-radians/float := math.atan2 accel.x den-pitch
+    pitch-degrees/float := pitch-radians * deg_
+
+    // roll: rotation around X (left/right)
+    den-roll/float := (math.sqrt (accel.x * accel.x + accel.z * accel.z)) + eps_
+    roll-radians/float := math.atan2 accel.y den-roll
+    roll-degrees/float := roll-radians * deg_
+
+    // yaw is undefined from accel alone; keep null (or 0.0 if you prefer)
+    return AccelOrientation magnitude pitch-degrees roll-degrees null
+
+
+
+
+
+  /**
+  Random Number Generation
+
+  Following blog post: https://gist.github.com/bloc97/b55f684d17edd8f50df8e918cbc00f94
+
+  Text: The MPU6050 is a multipurpose Accelerometer and Gyroscope sensor module
+   for the Arduino, it can read raw acceleration from 3 axis and raw turn rate
+   from 3 orientations. To our surprise, its acceleration sensor's noise level
+   far surpasses its resolution, with at least 4 bits of recorded entropy.
+
+  A naive approach to generate a random byte would to directly take the 4 least
+   significant bits of the x and y axis, XORed with the z axis LSBs. //X, Y, Z
+   are 4-bit values from each axis:
+
+   randomByte := ((Y ^ Z) << 4) | (X ^ Z))
+
+  Unfortunately this method is flawed as the distribution and bias of the noise
+   is different and unpredictable between axes, not to mention other sensors of
+   the same model. A simple fix would be to discard some bits and only use 2 bits
+   from each axis, but that would yield only 6 bits of noise per reading, making
+   it impossible to generate a 8-bit number with only one data sample of the
+   accelerometer.
+
+  However with clever transposition, we can achieve 8 bits of randomness using 4
+   bits that are not necessarily the same magnitude from each axis. We are
+   supposing that the upper 2 bits are not always reliable, so we will XOR each
+   axis' higher 2 bits with another axis' lower 2 bits, and vice-versa.  An
+   important property to note is the "piling-up lemma"[4], which states that
+   XORing a good random source with a bad one is not harmful. Since we have 3
+   axis, each having 4 bits, we will obtain 8 bits at the end. This operation
+   is similar to Convolution:
+
+   randomByte := ((X & 0x3) << 6) ^ (Z << 4) ^ (Y << 2) ^ X ^ (Z >> 2)
+
+  This final method achieves state of the art performance for True Random Number
+   Generation on the Arduino, with our tests providing us around 8000 random bits
+   per second on an Arduino Uno.
+  */
+  get-random-number -> int:
+    // Read acceleromter data
+    a-x := read-register_ REG-ACCEL-XOUT_ --signed
+    a-y := read-register_ REG-ACCEL-YOUT_ --signed
+    a-z := read-register_ REG-ACCEL-ZOUT_ --signed
+
+    // Use the second function described above to return a random byte
+    random-byte := ((a-x & 0x3) << 6) ^ (a-z << 4) ^ (a-y << 2) ^ a-x ^ (a-z >> 2)
+    return random-byte
 
   /**
   Reads and optionally masks/parses register data
@@ -425,3 +680,16 @@ class Mpu6050:
       out-string = out-string.pad --left 4 '0'
       out-string = "$(out-string[0..4])"
       return out-string
+
+
+  /** EXPERIMENTAL
+
+  */
+
+class AccelOrientation:
+  magnitude/float ::= 0.0
+  roll/float ::= 0.0
+  pitch/float ::= 0.0
+  yaw/float? ::= 0.0
+
+  constructor .magnitude .roll .pitch .yaw:

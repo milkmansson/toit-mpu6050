@@ -1,9 +1,14 @@
-# Toit driver for TDK MPU6000 and MPU6050 I2C Accelerometer and Gyroscope
+# Toit driver for Invensense MPU6000 and MPU6050 I2C Accelerometer and Gyroscope
 
 
 
 ![Front and back of an as5600](images/mpu6050.jpg)
 
+> [!WARNING]
+> This device is allegedly obsolete.  It is quoted as being noisy and outdated.
+> However they are still cheap, widely available, and good enough for many
+> projects such as mine.  For this reason I've attempted to do as good a job as
+> is possible for this device.
 
 ## Features
 
@@ -33,22 +38,25 @@ print "$(%0.2f new-gyro.z)deg/sec z"
 ### Accelerometer Data
 One measurement from the accelerometer on the MPU6050 represents the
 instantaneous acceleration being experienced by the sensor, split along its
-three orthogonal sensing axes (X, Y, Z).
-Similar to the gyroscope, the xyz data is provided in a Toit [`Point3f`](https://libs.toit.io/math/class-Point3f) object, as per this example:
+three orthogonal sensing axes (X, Y, Z).  Similar to the gyroscope, the xyz data
+is provided in a Toit [`Point3f`](https://libs.toit.io/math/class-Point3f)
+object, as per this example:
 ```Toit
 // Required for math objects
 import math
 
 // I2C setup omitted
 new-accel := ?
-new-accel = mpu6050-driver.read-accelertation    // returns math.Point3f object
+new-accel = mpu6050-driver.read-acceleration    // returns math.Point3f object
 
 // Print single measurement
 print "$(%0.2f new-accel.x)g x"
 print "$(%0.2f new-accel.y)g y"
 print "$(%0.2f new-accel.z)g z"
 ```
-See the 'continuous-accel-read' example.  Note that when the device is sitting there doing nothing physical, the axis representing gravity will remain at the value of g (gravitational acceleration - 9.80665 m/s²), for that axis:
+See the 'continuous-accel-read' example.  Note that when the device is sitting
+there doing nothing physical, the axis representing gravity will remain at the
+value of g (gravitational acceleration - 9.80665 m/s²), for that axis:
 ```Text
 [jaguar] INFO: program ea3248cd-18e0-7373-4ee4-0cff10ff4ebe started
  Found Mpu60x0 on 0x68
@@ -82,8 +90,57 @@ this mode,  :
 
 ```
 
+## Undocumented Features
+The MPU6050 has allegedy many undocumented registers that the community knows
+and continues to use.  Functions that have been implemented based on these
+undocumented features are:
 
-### Features not implemented yet
+
+### Sources
+Links to sources of information about these:
+- [Arduino Forums Post 'Reverse Engineering Undocumented MPU6050 Registers'](https://forum.arduino.cc/t/reverse-engineering-undocumented-mpu6050-registers/698986/2)
+
+
+## Experimental Features
+Whilst I expect these won't be useful to anyone, I've used the MPU6050 for a
+couple of other features/outcomes/reasons in the past:
+
+### Random Number Generation
+I've used it as a source of entropy for digital dice.  The functions below are
+not direct features of the IC, but some maths I did with the output of the
+device.  In this case, one would shake the MPU6050/device, and put it down.   A
+dice roll would finalise.  This could be between between 1 and 6, or with the `--scale` switch, be configured for any range, e.g. a D20 dice roll:
+```Toit
+driver.get-random-number --scale=6   // 1 <= x <= 6 (not 0 <= x <= 6)
+```
+See the examples folder for full code and reference/excerpts from
+[this article](https://gist.github.com/bloc97/b55f684d17edd8f50df8e918cbc00f94)
+which inspired this work several years ago.
+
+### Magnitude
+By using the accelerometer output a magnitude vector can be established of the
+total force (in whatever direction, as opposed to trying to track the three
+dimensions separately) with some values indicating direction.  To account for
+these values together there is a separate object, as a Toit-native 'set' cannot
+contain floats.  Ensure you configure the range to suit your expected strength,
+and note that yaw is undefined from acceleration alone - the value is kept at
+null.
+```Toit
+// I2C setup omitted
+
+// Set expected range (in g's) from 2, 4, 8 or 16, using the constants.
+mpu6050-driver.set-accel-fs ACCEL-FS-RANGE-8G
+object := mpu6050-driver.read-acceleration-vector
+
+// Print single measurement
+300.repeat:
+  print "$(%0.2f object.magnitude)g"
+  sleep --ms=100
+```
+Note that with very slow gentle movement, the magnitude value stays pretty close
+to 1, in whatever direction that it comes to rest.  The other values (pitch/roll) change to show the movement direction in 3 dimensions (roll/pitch/yaw).
+
+## Features not implemented yet
 - MPU6050 as an auxiliary independent I2C bus, hosted on pins XDA/XCL.  Whilst
   this device is small/affordable, similar devices with magnetometers already
   built-in already exist and are easily available.
