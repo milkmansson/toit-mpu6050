@@ -7,13 +7,71 @@
 
 ## Features
 
+### Gyroscope Data
+Each gyroscope sample from the MPU6050 gives angular velocity, i.e., how fast
+the device is rotating around each axis at that moment.  its usually represented
+in degrees/second for each of the three axes.  Note that this is not a universal
+orientation, but a measure of **change** of orientation.
+This 3-part measurement is obtained using Toit
+[Math](https://libs.toit.io/math/library-summary) library's
+[`Point3f`](https://libs.toit.io/math/class-Point3f) object.  Gyroscope
+measurement can be obtained by:
+```Toit
+// Required for math objects
+import math
+
+// I2C setup omitted
+new-gyro := ?
+new-gyro = mpu6050-driver.read-gyroscope    // returns math.Point3f object
+
+// Print single measurement
+print "$(%0.2f new-gyro.x)deg/sec x"
+print "$(%0.2f new-gyro.y)deg/sec y"
+print "$(%0.2f new-gyro.z)deg/sec z"
+```
+
+### Accelerometer Data
+One measurement from the accelerometer on the MPU6050 represents the
+instantaneous acceleration being experienced by the sensor, split along its
+three orthogonal sensing axes (X, Y, Z).
+Similar to the gyroscope, the xyz data is provided in a Toit [`Point3f`](https://libs.toit.io/math/class-Point3f) object, as per this example:
+```Toit
+// Required for math objects
+import math
+
+// I2C setup omitted
+new-accel := ?
+new-accel = mpu6050-driver.read-accelertation    // returns math.Point3f object
+
+// Print single measurement
+print "$(%0.2f new-accel.x)g x"
+print "$(%0.2f new-accel.y)g y"
+print "$(%0.2f new-accel.z)g z"
+```
+See the 'continuous-accel-read' example.  Note that when the device is sitting there doing nothing physical, the axis representing gravity will remain at the value of g (gravitational acceleration - 9.80665 m/s²), for that axis:
+```Text
+[jaguar] INFO: program ea3248cd-18e0-7373-4ee4-0cff10ff4ebe started
+ Found Mpu60x0 on 0x68
+ get-whoami returned: 0x34
+ get-temperature returned: 20.483c
+ execute-gyro-self-test now:
+ read-accel returned: 1.0459x.g 0.0337y.g 0.0269z.g
+ read-accel returned: 1.0437x.g 0.0312y.g 0.0295z.g
+ read-accel returned: 1.0488x.g 0.0312y.g 0.0288z.g
+ read-accel returned: 1.0447x.g 0.0234y.g 0.0276z.g
+ read-accel returned: 1.0388x.g 0.0386y.g 0.0247z.g
+ read-accel returned: 1.0457x.g 0.0234y.g 0.0156z.g
+ read-accel returned: 1.0457x.g 0.0356y.g 0.0273z.g
+ ...
+```
+
 ### Temperature gauge
-The device has its own thermal sensor. Its range is good for –40C → +85C with
-increments of 0.00294C, however the overall accuracy is +/-1C. Temperature can
+The device has its own thermal sensor. Its range is good for –40C to +85C with
+increments of 0.00294C, however the overall accuracy is specified at +/- 1C. Temperature can
 be obtained with:
 ```Toit
 // I2C setup omitted
-print " get-temperature: $(%0.3f driver.read-temperature)c"  // e.g.  24.21c
+print " get-temperature: $(%0.3f driver.read-temperature)c"  // e.g.  24.213c
 ```
 
 ### FIFO Buffer

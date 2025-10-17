@@ -26,7 +26,6 @@ main:
   device := bus.device Mpu6050.I2C_ADDRESS
   driver := Mpu6050 device
 
-  print " get-whoami returned: 0x$(%02x driver.get-whoami)"
   print " get-temperature returned: $(%0.3f driver.read-temperature)c"
 
   print " execute-gyro-self-test now:"
@@ -34,15 +33,8 @@ main:
   driver.execute-gyro-selftest-y
   driver.execute-gyro-selftest-z
 
-  gyro := ""
-  accel := ""
   new-gyro := ?
-  new-accel := ?
-
   300.repeat:
     new-gyro = driver.read-gyroscope
-    new-accel = driver.read-acceleration
-    gyro = " read-gyro returned: $(%0.2f new-gyro.x)x $(%0.2f new-gyro.y)y $(%0.2f new-gyro.z)z"
-    accel = " read-accel returned: $(%0.2f new-accel.x)x.g $(%0.2f new-accel.y)y.g $(%0.2f new-accel.z)z.g"
-    print "$gyro $accel"
-    sleep --ms=100
+    print " read-gyro returned: $(%0.2f new-gyro.x)x $(%0.2f new-gyro.y)y $(%0.2f new-gyro.z)z"
+    sleep --ms=250

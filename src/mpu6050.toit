@@ -188,9 +188,9 @@ class Mpu6050:
   read-acceleration -> math.Point3f:
     a-fs := get-accel-fs   // Obtain range configuration
     a-lsb := convert-accel-fs-to-scale_ a-fs  // Obtain multiplier
-    a-x := (read-register_ REG-ACCEL-XOUT_ --signed) * a-lsb
-    a-y := (read-register_ REG-ACCEL-YOUT_ --signed) * a-lsb
-    a-z := (read-register_ REG-ACCEL-ZOUT_ --signed) * a-lsb
+    a-x := (read-register_ REG-ACCEL-XOUT_ --signed).to-float / a-lsb
+    a-y := (read-register_ REG-ACCEL-YOUT_ --signed).to-float / a-lsb
+    a-z := (read-register_ REG-ACCEL-ZOUT_ --signed).to-float / a-lsb
     return math.Point3f a-x a-y a-z
 
   /**
@@ -269,7 +269,7 @@ class Mpu6050:
   Converts Gyroscope scale selectors to actual values/multipliers.
   */
   convert-gyro-fs-to-scale_ value/int -> float:
-    // AFS_SEL Full Scale Range LSB Sensitivity
+    // GFS_SEL Full Scale Range LSB Sensitivity
     assert: 0 <= value <= 3
     if value == GYRO-FS-131-0: return 131.0 // ± 250  °/s 131 LSB/°/s
     if value == GYRO-FS-65-5:  return 65.5  // ± 500  °/s 65.5 LSB/°/s
@@ -286,10 +286,10 @@ class Mpu6050:
     write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-X-SELFTEST-MASK_ --width=8
 
   execute-gyro-selftest-y -> none:
-    write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-X-SELFTEST-MASK_ --width=8
+    write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-Y-SELFTEST-MASK_ --width=8
 
   execute-gyro-selftest-z -> none:
-    write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-X-SELFTEST-MASK_ --width=8
+    write-register_ REG-GYRO-CONFIG_ 1 --mask=GYRO-Z-SELFTEST-MASK_ --width=8
 
   read-temperature -> float:
     raw := read-register_ REG-TEMP_ --signed
