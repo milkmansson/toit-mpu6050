@@ -1,0 +1,6 @@
+prefixes:
+  mpu6050: ..
+  mpu60x0: ..
+packages:
+  ..:
+    path: ..

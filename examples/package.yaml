@@ -1,0 +1,5 @@
+dependencies:
+  mpu6050:
+    path: ..
+  mpu60x0:
+    path: ..
