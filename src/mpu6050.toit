@@ -27,6 +27,15 @@ class Mpu6050:
   static ACCEL-Y-SELFTEST-MASK_ ::= 0b01000000
   static ACCEL-Z-SELFTEST-MASK_ ::= 0b00100000
   static ACCEL-FS-SELECT-MASK_  ::= 0b00011000
+  static ACCEL-HPF-MASK_        ::= 0b00000111
+
+  static ACCEL-HPF-RESET  ::= 0 // Reset
+  static ACCEL-HPF-5HZ    ::= 1 // On @ 5 Hz
+  static ACCEL-HPF-2-5HZ  ::= 2 // On @ 2.5 Hz
+  static ACCEL-HPF-1-25HZ ::= 3 // On @ 1.25 Hz
+  static ACCEL-HPF-0-63HZ ::= 4 // On @ 0.63 Hz
+  static ACCEL-HPF-HOLD   ::= 7 // Hold
+
   static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
   static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 250deg/s
   static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 250deg/s
@@ -68,6 +77,20 @@ class Mpu6050:
   static PM-STBY-GYRO-Y-MASK_  ::= 0b00000000_00000010
   static PM-STBY-GYRO-Z-MASK_  ::= 0b00000000_00000001
 
+  // Cycle Wake-up Frequency
+  static SLEEP-CYCLE-WAKE-FREQ-1-25HZ ::= 0  // 1.25 Hz
+  static SLEEP-CYCLE-WAKE-FREQ-5HZ    ::= 1  // 5 Hz
+  static SLEEP-CYCLE-WAKE-FREQ-20HZ   ::= 2  // 20 Hz
+  static SLEEP-CYCLE-WAKE-FREQ-40HZ   ::= 3  // 40 Hz
+
+  static CLOCK-SRC-INTERNAL-8MHZ    ::= 0 // Internal 8MHz oscillator
+  static CLOCK-SRC-PLL-X-G          ::= 1 // PLL with X axis gyroscope reference
+  static CLOCK-SRC-PLL-Y-G          ::= 2 // PLL with Y axis gyroscope reference
+  static CLOCK-SRC-PLL-Z-G          ::= 3 // PLL with Z axis gyroscope reference
+  static CLOCK-SRC-PLL-EXT-32768KHZ ::= 4 // PLL with external 32.768kHz reference
+  static CLOCK-SRC-PLL-EXT-192MHZ   ::= 5 // PLL with external 19.2MHz reference
+  static CLOCK-STOP                 ::= 7 // Stops the clock and keeps the timing generator in reset
+
   // Signal Path Reset
   static REG-SIGNAL-PATH-RESET_ ::= 0x68
   static SIGNAL-PATH-GYRO-RESET-MASK_  ::= 0b00000100
@@ -81,20 +104,23 @@ class Mpu6050:
   static INTRPT-FIFO-OVERFLOW_      ::= 0b00010000
 
   static REG-INTRPT-PIN-CONFIG_ ::= 0x37
-  static INTRPT-PIN-ACTIVE-HL_       ::= 0b10000000  // 0 active high or 1 active low
-  static INTRPT-PIN-PUSH-OPEN_       ::= 0b01000000  // 0 Push Pull or 1 Open Drain
-  static INTRPT-PIN-LATCH_           ::= 0b00100000  // 0 50us pulse or 1 latch
-  static INTRPT-READ-CLEAR_          ::= 0b00010000  // 0 manual clearing or 1 reads clear int
-  static INTRPT-FSYNC-PIN-ACTIVE-HL_ ::= 0b00001000
-  static INTRPT-FSYNC-PIN-ENABLE_    ::= 0b00000100
-  static INTRPT-I2C-BYPASS-ENABLE_   ::= 0b00000010
+  static INTRPT-PIN-ACTIVE-HL_       ::= 0b1000_0000  // 0 active high or 1 active low
+  static INTRPT-PIN-PUSH-OPEN_       ::= 0b0100_0000  // 0 Push Pull or 1 Open Drain
+  static INTRPT-PIN-LATCH_           ::= 0b0010_0000  // 0 50us pulse or 1 latch
+  static INTRPT-READ-CLEAR_          ::= 0b0001_0000  // 0 manual clearing or 1 reads clear int
+  static INTRPT-FSYNC-PIN-ACTIVE-HL_ ::= 0b0000_1000
+  static INTRPT-FSYNC-PIN-ENABLE_    ::= 0b0000_0100
+  static INTRPT-I2C-BYPASS-ENABLE_   ::= 0b0000_0010
 
 
   // Undocumented
-  static MOT-DETECT-THR_      ::= 0x1F  // Motion detection threshold bits [7:0]
-  static MOT-DETECT-DURATION_ ::= 0x20  // Duration counter threshold for motion interrupt generation, 1 kHz rate, LSB = 1 ms
-  static MOT-DETECT_CTRL_     ::= 0x69
-
+  static MOT-DETECT-THRESHOLD_ ::= 0x1F
+  static MOT-DETECT-DURATION_  ::= 0x20
+  static MOT-DETECT-CTRL_      ::= 0x69
+  // MOT_DETECT_CTRL bitfields
+  static MOT-DETECT-ACCEL-ON-DELAY-MASK_ ::= 0b0011_0000
+  static MOT-DETECT-FF-COUNT-MASK_       ::= 0b0000_1100
+  static MOT-DETECT-COUNT-MASK_          ::= 0b0000_0011
 
   // Experimental
   static deg_/float ::= (180.0 / math.PI)
@@ -122,13 +148,13 @@ class Mpu6050:
 
     // Init: Device is asleep at power on, returning 0 for all values
     wakeup-now
-    reset-gyro
-    reset-temp
-    reset-accel
+    reset-gyroscope
+    reset-temperature
+    reset-accelerometer
     enable-temperature
-    set-clock-source
-    set-accel-fs ACCEL-FS-RANGE-8G  // Set accelerometer range to +/- 8g
-    set-gyro-fs GYRO-FS-131-0
+    set-clock-source CLOCK-SRC-INTERNAL-8MHZ // Internal 8MHz Oscillator
+    set-accelerometer-full-scale ACCEL-FS-RANGE-8G      // Set accelerometer range to +/- 8g
+    set-gyroscope-full-scale GYRO-FS-131-0
 
 
   /**
@@ -144,19 +170,19 @@ class Mpu6050:
   /**
   Resets Gyroscope Signal Path.
   */
-  reset-gyro -> none:
+  reset-gyroscope -> none:
     write-register_ REG-SIGNAL-PATH-RESET_ 1 --mask=SIGNAL-PATH-GYRO-RESET-MASK_ --width=8
 
   /**
   Resets Temperature Signal Path.
   */
-  reset-temp -> none:
+  reset-temperature -> none:
     write-register_ REG-SIGNAL-PATH-RESET_ 1 --mask=SIGNAL-PATH-TEMP-RESET-MASK_ --width=8
 
   /**
   Resets Accelerometer Signal Path.
   */
-  reset-accel -> none:
+  reset-accelerometer -> none:
     write-register_ REG-SIGNAL-PATH-RESET_ 1 --mask=SIGNAL-PATH-ACCEL-RESET-MASK_ --width=8
 
   /**
@@ -170,6 +196,48 @@ class Mpu6050:
   */
   disable-temperature -> none:
     write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-TEMP-DISABLE-MASK_ --width=16
+
+  /**
+  Enable "Accelerometer Only Low Power Mode".
+
+  - Set CYCLE bit to 1
+  - Set SLEEP bit to 0
+  - Set TEMP_DIS bit to 1
+  - Set STBY_XG, STBY_YG, STBY_ZG bits to 1
+
+  Uses SLEEP-CYCLE-WAKE-FREQ-* Constants.
+  */
+  enable-accelerometer-only-low-power-mode setting/int -> none:
+    assert: 0 <= setting <= 3
+    enable-sleep-cycle setting
+    wakeup-now
+    disable-temperature
+    disable-gyroscope-x
+    disable-gyroscope-y
+    disable-gyroscope-z
+
+  /**
+  Enable Sleep Cycle.
+
+  When this is enabled (and SLEEP is disabled) the MPU-60X0 will cycle
+   between sleep mode and waking up to take a single sample of data from active
+   sensors, at a rate determined by LP_WAKE_CTRL (register 108).
+
+  Uses SLEEP-CYCLE-WAKE-FREQ-* Constants.
+  */
+  enable-sleep-cycle setting/int -> none:
+    assert: 0 <= setting <= 3
+    write-register_ REG-POWER-MANAGEMENT_ 1 --mask=PM-CYCLE-MASK_ --width=16
+    write-register_ REG-POWER-MANAGEMENT_ setting --mask=PM-LP-WAKE-CTRL-MASK_ --width=16
+
+  /**
+  Disable Sleep Cycle.
+
+  When this is disabled (and SLEEP is disabled) the MPU-60X0 will not sleep in
+  intervals.  See $enable-sleep-cycle
+  */
+  disable-sleep-cycle -> none:
+    write-register_ REG-POWER-MANAGEMENT_ 0 --mask=PM-CYCLE-MASK_ --width=16
 
   /**
   Goes to sleep.
@@ -213,8 +281,8 @@ class Mpu6050:
   - 3 | ±16g 2048 LSB/g
   */
   read-acceleration -> math.Point3f:
-    a-fs := get-accel-fs   // Obtain range configuration
-    a-lsb := convert-accel-fs-to-scale_ a-fs  // Obtain multiplier
+    a-fs := get-accelerometer-full-scale      // Obtain range configuration
+    a-lsb := convert-accel-fs-to-value_ a-fs  // Obtain multiplier
     a-x := (read-register_ REG-ACCEL-XOUT_ --signed).to-float / a-lsb
     a-y := (read-register_ REG-ACCEL-YOUT_ --signed).to-float / a-lsb
     a-z := (read-register_ REG-ACCEL-ZOUT_ --signed).to-float / a-lsb
@@ -230,28 +298,53 @@ class Mpu6050:
     return math.Point3f a-x a-y a-z
 
   /**
+  Set Accelerometer High Pass Filter
+
+  3-bit unsigned value. Selects the Digital High Pass Filter configuration.
+  ACCEL_HPF configures the DHPF available in the path leading to motion
+  detectors (Free Fall, Motion threshold, and Zero Motion). The high pass filter
+  output is not available to the data registers (see Figure in Section 8 of the
+  MPU-6000/MPU-6050 Product Specification document).
+
+  The high pass filter has three modes:
+  - Reset: The filter output settles to zero within one sample.  This
+    effectively disables the high pass filter. This mode may be toggled to
+    quickly settle the filter.
+  - On: The high pass filter will pass signals above the cut off frequency.
+  - Hold: When triggered, the filter holds the present sample. The filter output
+    will be the difference between the input sample and the held sample.
+  */
+  set-accelerometer-high-pass-filter raw/int -> none:
+    assert: 0 <= raw <= 7
+    write-register_ REG-ACCEL-CONFIG_ raw --mask=ACCEL-HPF-MASK_ --width=8
+
+  get-accelerometer-high-pass-filter -> int:
+    return read-register_ REG-ACCEL-CONFIG_ --mask=ACCEL-HPF-MASK_ --width=8
+
+
+  /**
   Gets Accelerometer scale value from the register.
   */
-  get-accel-fs -> int:
+  get-accelerometer-full-scale -> int:
     return read-register_ REG-ACCEL-CONFIG_ --mask=ACCEL-FS-SELECT-MASK_ --width=8
 
   /**
   Sets Accelerometer scale values from the register.
   */
-  set-accel-fs raw/int -> none:
+  set-accelerometer-full-scale raw/int -> none:
     assert: 0 <= raw <= 3
     write-register_ REG-ACCEL-CONFIG_ raw --mask=ACCEL-FS-SELECT-MASK_ --width=8
 
   /**
   Converts Accelerometer scale selectors to actual values/multipliers.
   */
-  convert-accel-fs-to-scale_ value/int -> int:
+  convert-accel-fs-to-value_ config/int -> int:
     // AFS_SEL Full Scale Range LSB Sensitivity
-    assert: 0 <= value <= 3
-    if value == ACCEL-FS-RANGE-2G: return 16384 // ±2g 16384 LSB/g
-    if value == ACCEL-FS-RANGE-4G: return 8192  // ±4g 8192 LSB/g
-    if value == ACCEL-FS-RANGE-8G: return 4096  // ±8g 4096 LSB/g
-    if value == ACCEL-FS-RANGE-16G: return 2048  // ±16g 2048 LSB/g
+    assert: 0 <= config <= 3
+    if config == ACCEL-FS-RANGE-2G: return 16384 // ±2g 16384 LSB/g
+    if config == ACCEL-FS-RANGE-4G: return 8192  // ±4g 8192 LSB/g
+    if config == ACCEL-FS-RANGE-8G: return 4096  // ±8g 4096 LSB/g
+    if config == ACCEL-FS-RANGE-16G: return 2048  // ±16g 2048 LSB/g
     return 0
 
   execute-accel-selftest -> none:
@@ -395,8 +488,8 @@ class Mpu6050:
   - 3 | ± 2000 °/s 16.4 LSB/°/s
   */
   read-gyroscope -> math.Point3f:
-    g-fs := get-gyro-fs   // Obtain range configuration
-    g-lsb := convert-gyro-fs-to-scale_ g-fs   // Obtain multiplier
+    g-fs := get-gyroscope-full-scale          // Obtain range configuration
+    g-lsb := convert-gyro-fs-to-value_ g-fs   // Obtain multiplier
     g-x := (read-register_ REG-GYRO-XOUT_ --signed) / g-lsb
     g-y := (read-register_ REG-GYRO-YOUT_ --signed) / g-lsb
     g-z := (read-register_ REG-GYRO-ZOUT_ --signed) / g-lsb
@@ -405,26 +498,26 @@ class Mpu6050:
   /**
   Gets Gyroscope scale values from the register.
   */
-  get-gyro-fs -> int:
+  get-gyroscope-full-scale -> int:
     return read-register_ REG-GYRO-CONFIG_ --mask=GYRO-FS-SELECT-MASK_ --width=8
 
   /**
   Sets Gyroscope scale values from the register.
   */
-  set-gyro-fs raw/int -> none:
+  set-gyroscope-full-scale raw/int -> none:
     assert: 0 <= raw <= 3
     write-register_ REG-GYRO-CONFIG_ raw --mask=GYRO-FS-SELECT-MASK_ --width=8
 
   /**
   Converts Gyroscope scale selectors to actual values/multipliers.
   */
-  convert-gyro-fs-to-scale_ value/int -> float:
+  convert-gyro-fs-to-value_ config/int -> float:
     // GFS_SEL Full Scale Range LSB Sensitivity
-    assert: 0 <= value <= 3
-    if value == GYRO-FS-131-0: return 131.0 // ± 250  °/s 131 LSB/°/s
-    if value == GYRO-FS-65-5:  return 65.5  // ± 500  °/s 65.5 LSB/°/s
-    if value == GYRO-FS-32-8:  return 32.8  // ± 1000 °/s 32.8 LSB/°/s
-    if value == GYRO-FS-16-4:  return 16.4  // ± 2000 °/s 16.4 LSB/°/s
+    assert: 0 <= config <= 3
+    if config == GYRO-FS-131-0: return 131.0 // ± 250  °/s 131 LSB/°/s
+    if config == GYRO-FS-65-5:  return 65.5  // ± 500  °/s 65.5 LSB/°/s
+    if config == GYRO-FS-32-8:  return 32.8  // ± 1000 °/s 32.8 LSB/°/s
+    if config == GYRO-FS-16-4:  return 16.4  // ± 2000 °/s 16.4 LSB/°/s
     return 0.0
 
   execute-gyro-selftest -> none:
@@ -480,6 +573,122 @@ class Mpu6050:
   */
   get-whoami -> int:
     return read-register_ REG-WHO-AM-I_ --mask=REG-WHO-AM-I-MASK_ --width=8
+
+
+
+
+
+
+
+
+
+  /** UNDOCUMENTED */
+
+  /**
+  Set Motion Detection Threshold
+
+  Motion detection threshold: higher = harder to trigger.
+  */
+  set-motion-detection-threshold value/int -> none:
+    assert: 0 <= value <= 255
+    write-register_ MOT-DETECT-THRESHOLD_ value --width=8
+
+  /**
+  Get configured Motion Detection Threshold
+
+  Motion detection threshold: higher = harder to trigger.
+  */
+  get-motion-detection-threshold -> int:
+    raw := read-register_ MOT-DETECT-THRESHOLD_ --width=8
+    return raw
+
+  /**
+  Set Motion Detection Duration
+
+  The motion counter runs at 1 kHz, so 1 LSB = 1 ms. A motion interrupt is
+  asserted when the counter reaches this duration.
+  */
+  set-motion-detection-duration value/int -> none:
+    assert: 0 <= value <= 255
+    write-register_ MOT-DETECT-DURATION_ value --width=8
+
+  /**
+  Get configured Motion Detection Duration
+
+  The motion counter runs at 1 kHz, so 1 LSB = 1 ms. A motion interrupt is
+  asserted when the counter reaches this duration.
+  */
+  get-motion-detection-duration -> int:
+    raw := read-register_ MOT-DETECT-DURATION_ --width=8
+    return raw
+
+  /**
+  Set Acceleration Wake Delay
+
+  Extra acceleration wake delay: 4–7 ms (adds 0–3 ms beyond the default 4 ms).
+  */
+  set-acceleration-wake-delay-ms ms/int -> none:
+    assert: 4 <= ms <= 7
+    value/int := ms - 4
+    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
+
+  /**
+  Get Acceleration Wake Delay
+
+  Extra acceleration wake delay: 0–3 ms (adds 0–3 ms beyond the default 4 ms).
+  */
+  get-acceleration-wake-delay-ms -> int:
+    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
+    ms/int := raw + 4
+    return ms
+
+  /**
+  Set Freefall counter decrement rate.
+
+  Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
+  */
+  set-free-fall-count-decrement-rate value/int -> none:
+    assert: 0 <= value <= 3
+    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
+
+  /**
+  Get Freefall counter decrement rate.
+
+  Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
+  */
+  get-free-fall-count-decrement-rate -> int:
+    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
+    return raw
+
+  /**
+  Set Motion Detection counter decrement rate.
+
+  Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
+  */
+  set-motion-detection-count-decrement-rate value/int -> none:
+    assert: 0 <= value <= 3
+    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-COUNT-MASK_ --width=8
+
+  /**
+  Get Motion Detection counter decrement rate.
+
+  Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
+  */
+  get-motion-detection-count-decrement-rate -> int:
+    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-COUNT-MASK_ --width=8
+    return raw
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   /** EXPERIMENTAL */

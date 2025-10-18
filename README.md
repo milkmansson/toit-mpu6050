@@ -1,4 +1,4 @@
-# Toit driver for Invensense MPU6000 and MPU6050 I2C Accelerometer and Gyroscope
+# Toit driver for Invensense (TDK) MPU6000 and MPU6050 I2C Accelerometer and Gyroscope
 
 
 
@@ -7,8 +7,7 @@
 > [!WARNING]
 > This device is allegedly obsolete.  It is quoted as being noisy and outdated.
 > However they are still cheap, widely available, and good enough for many
-> projects such as mine.  For this reason I've attempted to do as good a job as
-> is possible for this device.
+> projects such as mine, making the driver worth the time to write.
 
 ## Features
 
@@ -94,12 +93,19 @@ this mode,  :
 The MPU6050 has allegedy many undocumented registers that the community knows
 and continues to use.  Functions that have been implemented based on these
 undocumented features are:
-
+- Freefall detection
+- Motion activation
+- X/Y/Z Fine Gain Control
+- DMP - never fully documented, it was reverse engineered by the community.  A
+  blob of several KB needs to be uploaded to the registers on every start.
+  I'm not 100% sure if embedding this blob and providing in open source code
+  is allowed on Github.  An implementation using the ESP32 CPU is also possible.
+- Others...
 
 ### Sources
 Links to sources of information about these:
 - [Arduino Forums Post 'Reverse Engineering Undocumented MPU6050 Registers'](https://forum.arduino.cc/t/reverse-engineering-undocumented-mpu6050-registers/698986/2)
-
+- [MPU6050 register list on I2CDevLib.com](https://www.i2cdevlib.com/devices/mpu6050#registers)
 
 ## Experimental Features
 Whilst I expect these won't be useful to anyone, I've used the MPU6050 for a
