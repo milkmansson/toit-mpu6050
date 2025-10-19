@@ -72,6 +72,12 @@ value of g (gravitational acceleration - 9.80665 m/s²), for that axis:
  ...
 ```
 
+### Motion Detection
+This device can provide alerts when going from zero motion into motion, and vice
+versa.  There are thresholds determining how much motion is necessary to trigger
+each of these.  Its a somewhat undocumented feature however it functions very
+well using information from the community.
+
 ### Temperature gauge
 The device has its own thermal sensor. Its range is good for –40C to +85C with
 increments of 0.00294C, however the overall accuracy is specified at +/- 1C. Temperature can
@@ -94,12 +100,13 @@ The MPU6050 has allegedy many undocumented registers that the community knows
 and continues to use.  Functions that have been implemented based on these
 undocumented features are:
 - Freefall detection
-- Motion activation
 - X/Y/Z Fine Gain Control
-- DMP - never fully documented, it was reverse engineered by the community.  A
-  blob of several KB needs to be uploaded to the registers on every start.
-  I'm not 100% sure if embedding this blob and providing in open source code
-  is allowed on Github.  An implementation using the ESP32 CPU is also possible.
+- DMP - Onboard 'Motion Processing'.  This was never fully documented but has
+  been undergoing reverse engineering by the community, which is still
+  incomplete.  A blob of several KB needs to be uploaded to the registers upon
+  power up.  I'm not 100% sure of embedding a blob and providing it here...
+  Instead for now I'll do my best for implementations using math on the ESP32
+  CPU.
 - Others...
 
 ### Sources
@@ -111,22 +118,18 @@ Links to sources of information about these:
 Whilst I expect these won't be useful to anyone, I've used the MPU6050 for a
 couple of other features/outcomes/reasons in the past:
 
-### Random Number Generation
-I've used it as a source of entropy for digital dice.  The functions below are
-not direct features of the IC, but some maths I did with the output of the
-device.  In this case, one would shake the MPU6050/device, and put it down.   A
-dice roll would finalise.  This could be between between 1 and 6, or with the `--scale` switch, be configured for any range, e.g. a D20 dice roll:
-```Toit
-driver.get-random-number --scale=6   // 1 <= x <= 6 (not 0 <= x <= 6)
-```
-See the examples folder for full code and reference/excerpts from
-[this article](https://gist.github.com/bloc97/b55f684d17edd8f50df8e918cbc00f94)
-which inspired this work several years ago.
-
 ### Magnitude
 By using the accelerometer output a magnitude vector can be established of the
-total force (in whatever direction, as opposed to trying to track the three
-dimensions separately) with some values indicating direction.  To account for
+total force (in whatever direction, as opposed to trying to track the size in three
+dimensions simultaneously).
+```Toit
+// I2C setup omitted
+mpu6050-driver.magnitude mpu6050-driver.read-acceleration
+
+// eg
+```
+
+This value, combined with pitch roll and yaw is with some values indicating direction.  To account for
 these values together there is a separate object, as a Toit-native 'set' cannot
 contain floats.  Ensure you configure the range to suit your expected strength,
 and note that yaw is undefined from acceleration alone - the value is kept at

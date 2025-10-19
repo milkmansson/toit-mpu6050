@@ -1,4 +1,3 @@
-
 // Copyright (C) 2025 Toit Contributors
 // Use of this source code is governed by a Zero-Clause BSD license that can
 // be found in the EXAMPLES_LICENSE file.
@@ -29,7 +28,7 @@ main:
   print " get-whoami returned: 0x$(%02x driver.get-whoami)"
   print " get-temperature returned: $(%0.3f driver.read-temperature)c"
 
-  print " execute-gyro-self-test now:"
+  print " Executing execute-gyro-self-test now:"
   driver.execute-gyro-selftest-x
   driver.execute-gyro-selftest-y
   driver.execute-gyro-selftest-z

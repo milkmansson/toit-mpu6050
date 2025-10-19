@@ -9,12 +9,10 @@ import binary
 import serial.device as serial
 import serial.registers as registers
 
-
 class Mpu6050:
-  /**  Default $I2C-ADDRESS is 0x36  */
+  /**  Default $I2C-ADDRESS is 0x68  */
   static I2C-ADDRESS ::= 0x68
-  static I2C-ADDRESS-AD0-0 ::= 0x68
-  static I2C-ADDRESS-AD0-1 ::= 0x69
+  static I2C-ADDRESS-AD0-1 ::= 0x69  // When pin AD0 is high
   static MPU-6050-WHOAMI ::= 0x34
 
   static DEFAULT-REGISTER-WIDTH_ ::= 16 // bits
@@ -37,9 +35,9 @@ class Mpu6050:
   static ACCEL-HPF-HOLD   ::= 7 // Hold
 
   static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-16-4  ::= 3  // 16.4 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 500deg/s
+  static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 1000deg/s
+  static GYRO-FS-16-4  ::= 3  // 16.4 LSB/deg/s  +/- 2000deg/s
 
   static REG-GYRO-XOUT_ ::= 0x43
   static REG-GYRO-YOUT_ ::= 0x45
@@ -98,29 +96,58 @@ class Mpu6050:
   static SIGNAL-PATH-TEMP-RESET-MASK_  ::= 0b00000001
 
   // Interrupts
-  static REG-INTRPT-ENABLE_       ::= 0x38
-  static INTRPT-DATA-READY-MASK_    ::= 0b00000001
-  static INTRPT-I2C-MASTER-SOURCES_ ::= 0b00001000
-  static INTRPT-FIFO-OVERFLOW_      ::= 0b00010000
+  static REG-INTRPT-ENABLE_  ::= 0x38
+  static REG-INTRPT-STATUS_  ::= 0x3a
+  static INTRPT-FREEFALL-DETECT    ::= 0b1000_0000
+  static INTRPT-MOTION-DETECT      ::= 0b0100_0000
+  static INTRPT-ZERO-MOTION-DETECT ::= 0b0010_0000
+  static INTRPT-FIFO-OVERFLOW      ::= 0b0001_0000
+  static INTRPT-I2C-MASTER-SOURCES ::= 0b0000_1000
+  static INTRPT-DMP                ::= 0b0000_0010
+  static INTRPT-DATA-READY         ::= 0b0000_0001
+
 
   static REG-INTRPT-PIN-CONFIG_ ::= 0x37
-  static INTRPT-PIN-ACTIVE-HL_       ::= 0b1000_0000  // 0 active high or 1 active low
-  static INTRPT-PIN-PUSH-OPEN_       ::= 0b0100_0000  // 0 Push Pull or 1 Open Drain
-  static INTRPT-PIN-LATCH_           ::= 0b0010_0000  // 0 50us pulse or 1 latch
-  static INTRPT-READ-CLEAR_          ::= 0b0001_0000  // 0 manual clearing or 1 reads clear int
-  static INTRPT-FSYNC-PIN-ACTIVE-HL_ ::= 0b0000_1000
-  static INTRPT-FSYNC-PIN-ENABLE_    ::= 0b0000_0100
-  static INTRPT-I2C-BYPASS-ENABLE_   ::= 0b0000_0010
+  static INTRPT-PIN-ACTIVE-HL-MASK_       ::= 0b1000_0000  // 0 active high or 1 active low
+  static INTRPT-PIN-PUSH-OPEN-MASK_       ::= 0b0100_0000  // 0 Push Pull or 1 Open Drain
+  static INTRPT-PIN-LATCH-MASK_           ::= 0b0010_0000  // 0 50us pulse or 1 latch
+  static INTRPT-READ-CLEAR-MASK_          ::= 0b0001_0000  // 0 manual clearing or 1 reads clear int
+  static INTRPT-FSYNC-PIN-ACTIVE-HL-MASK_ ::= 0b0000_1000
+  static INTRPT-FSYNC-PIN-ENABLE-MASK_    ::= 0b0000_0100
+  static INTRPT-I2C-BYPASS-ENABLE-MASK_   ::= 0b0000_0010
 
+  static REG-CONFIG_  ::= 0x1a
+  static CONFIG-DLPF-CONFIG-MASK_  ::= 0b0000_0111
+  static CONFIG-EXT-SYNC-SET-MASK_ ::= 0b0011_1000
 
   // Undocumented
-  static MOT-DETECT-THRESHOLD_ ::= 0x1F
-  static MOT-DETECT-DURATION_  ::= 0x20
-  static MOT-DETECT-CTRL_      ::= 0x69
-  // MOT_DETECT_CTRL bitfields
+
+  // Motion Detection
+  static REG-MOT-DETECT-THRESHOLD_ ::= 0x1F
+  static REG-MOT-DETECT-DURATION_  ::= 0x20
+  static REG-MOT-DETECT-CTRL_      ::= 0x69
+
+  // REG-MOT-DETECT-CTRL_ masks
   static MOT-DETECT-ACCEL-ON-DELAY-MASK_ ::= 0b0011_0000
   static MOT-DETECT-FF-COUNT-MASK_       ::= 0b0000_1100
   static MOT-DETECT-COUNT-MASK_          ::= 0b0000_0011
+
+  // Zero Motion Detection
+  static REG-ZMOT-DETECT-THRESHOLD_ ::= 0x21
+  static REG-ZMOT-DETECT-DURATION_  ::= 0x22
+  static ZMOT-LSB_ ::= 64
+
+  //
+  static REG-MOTION-DETECT-STATUS_ ::= 0x61
+  static MOT-DETECT-X-NEG ::= 0b1000_0000
+  static MOT-DETECT-X-POS ::= 0b0100_0000
+  static MOT-DETECT-Y-NEG ::= 0b0010_0000
+  static MOT-DETECT-Y-POS ::= 0b0001_0000
+  static MOT-DETECT-Z-NEG ::= 0b0000_1000
+  static MOT-DETECT-Z-POS ::= 0b0000_0100
+  static MOT-DETECT-MOT-TO-ZMOT ::= 0b0000_0001
+
+  //Enable the Zero-Motion interrupt in INT_ENABLE.
 
   // Experimental
   static deg_/float ::= (180.0 / math.PI)
@@ -134,7 +161,7 @@ class Mpu6050:
   constructor
       device/serial.Device
       --logger/log.Logger=log.default:
-    logger_ = logger.with-name "mpu60x0"
+    logger_ = logger.with-name "mpu6050"
     reg_ = device.registers
 
     tries := 5
@@ -156,6 +183,37 @@ class Mpu6050:
     set-accelerometer-full-scale ACCEL-FS-RANGE-8G      // Set accelerometer range to +/- 8g
     set-gyroscope-full-scale GYRO-FS-131-0
 
+  /**
+  Reading clears latching if manual
+  */
+  get-interrupt-status -> int:
+    return read-register_ REG-INTRPT-STATUS_ --width=8
+
+  /**
+  All bits clear when read, except for the (Zero Motion to Motion) polarity
+   indicator (bit 0) in mask $MOT-DETECT-MOT-TO-ZMOT
+  */
+  get-motion-detect-status -> int:
+    return read-register_ REG-MOTION-DETECT-STATUS_ --width=8
+
+  get-dlpf-config -> int:
+    return read-register_ REG-CONFIG_ --mask=CONFIG-DLPF-CONFIG-MASK_ --width=8
+
+  set-dlpf-config config/int -> none:
+    assert: 0 <= config <= 7
+    write-register_ REG-CONFIG_ config --mask=CONFIG-DLPF-CONFIG-MASK_  --width=8
+
+  enable-motion-detection-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-MOTION-DETECT --width=8
+
+  disable-motion-detection-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-MOTION-DETECT  --width=8
+
+  enable-zero-motion-detection-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-ZERO-MOTION-DETECT --width=8
+
+  disable-zero-motion-detection-interrupt -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-ZERO-MOTION-DETECT  --width=8
 
   /**
   Resets the device.
@@ -254,15 +312,7 @@ class Mpu6050:
   /**
   Sets Clock Source.
 
-  CLKSEL Clock Source
-    0 Internal 8MHz oscillator
-    1 PLL with X axis gyroscope reference
-    2 PLL with Y axis gyroscope reference
-    3 PLL with Z axis gyroscope reference
-    4 PLL with external 32.768kHz reference
-    5 PLL with external 19.2MHz reference
-    6 Reserved
-    7 Stops the clock and keeps the timing generator in reset
+  Uses one of the CLOCK-* Constants
   */
   set-clock-source source/int=0 -> none:
     write-register_ REG-POWER-MANAGEMENT_ source --mask=PM-CLOCK-SOURCE-MASK_ --width=16
@@ -273,12 +323,7 @@ class Mpu6050:
 
   Each 16-bit accelerometer measurement has a full scale defined in
   $ACCEL-FS-SELECT-MASK_ in register $REG-ACCEL-CONFIG_. For each full scale
-  setting, the accelerometers’ sensitivity changes per LSB:
-  SELECTION | Full Scale Range LSB Sensitivity
-  - 0 | ±2g 16384 LSB/g
-  - 1 | ±4g 8192 LSB/g
-  - 2 | ±8g 4096 LSB/g
-  - 3 | ±16g 2048 LSB/g
+  setting, the accelerometers’ sensitivity changes per LSB.
   */
   read-acceleration -> math.Point3f:
     a-fs := get-accelerometer-full-scale      // Obtain range configuration
@@ -318,9 +363,11 @@ class Mpu6050:
     assert: 0 <= raw <= 7
     write-register_ REG-ACCEL-CONFIG_ raw --mask=ACCEL-HPF-MASK_ --width=8
 
+  /**
+  Set Accelerometer High Pass Filter.  See $set-accelerometer-high-pass-filter
+  */
   get-accelerometer-high-pass-filter -> int:
     return read-register_ REG-ACCEL-CONFIG_ --mask=ACCEL-HPF-MASK_ --width=8
-
 
   /**
   Gets Accelerometer scale value from the register.
@@ -393,52 +440,58 @@ class Mpu6050:
   Sets Interrupts
   */
   enable-data-ready-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-DATA-READY-MASK_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-DATA-READY --width=8
 
   disable-data-ready-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-DATA-READY-MASK_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-DATA-READY --width=8
 
   enable-i2c-master-sources-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-I2C-MASTER-SOURCES_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-I2C-MASTER-SOURCES --width=8
 
   disable-i2c-master-sources-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-I2C-MASTER-SOURCES_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-I2C-MASTER-SOURCES --width=8
 
   enable-fifo-overflow-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-FIFO-OVERFLOW_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-FIFO-OVERFLOW --width=8
 
   disable-fifo-overflow-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-FIFO-OVERFLOW_ --width=8
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-FIFO-OVERFLOW --width=8
 
   set-interrupt-pin-active-high -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-ACTIVE-HL_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-ACTIVE-HL-MASK_ --width=8
 
   set-interrupt-pin-active-low -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-ACTIVE-HL_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-ACTIVE-HL-MASK_ --width=8
+
+  enable-interrupt-pin-latching -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-LATCH-MASK_ --width=8
+
+  disable-interrupt-pin-latching -> none:
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-LATCH-MASK_ --width=8
 
   set-interrupt-pin-push-pull -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-PUSH-OPEN_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-PUSH-OPEN-MASK_ --width=8
 
   set-interrupt-pin-open-drain -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-PUSH-OPEN_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-PIN-PUSH-OPEN-MASK_ --width=8
 
   set-interrupt-pin-manual-clear -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-READ-CLEAR_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-READ-CLEAR-MASK_ --width=8
 
   set-interrupt-pin-read-clears -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-READ-CLEAR_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-READ-CLEAR-MASK_ --width=8
 
   set-interrupt-fsync-pin-active-high -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL-MASK_ --width=8
 
   set-interrupt-fsync-pin-active-low -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ACTIVE-HL-MASK_ --width=8
 
   enable-fsync-pin -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ENABLE_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-FSYNC-PIN-ENABLE-MASK_ --width=8
 
   disable-fsync-pin -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ENABLE_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ENABLE-MASK_ --width=8
 
   /**
   Enables I2C bypass.
@@ -448,7 +501,7 @@ class Mpu6050:
    bus of the MPU-60X0.
   */
   enable-i2c-bypass -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-I2C-BYPASS-ENABLE_ --width=8
+    write-register_ REG-INTRPT-PIN-CONFIG_ 1 --mask=INTRPT-I2C-BYPASS-ENABLE-MASK_ --width=8
 
   /**
   Disables I2C bypass.
@@ -458,34 +511,14 @@ class Mpu6050:
   of I2C_MST_EN (Register 106 bit[5]).
   */
   disable-i2c-bypass -> none:
-    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-I2C-BYPASS-ENABLE_ --width=8
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-I2C-BYPASS-ENABLE-MASK_ --width=8
 
   /**
   Reads gyroscopic orientation at this moment.
 
-  Each 16-bit gyroscope measurement has a full scale defined in FS_SEL (Register
-  27). For each full scale setting, the gyroscopes’ sensitivity per LSB in GYRO
-  xOUT is shown in the table below:
-  SELECTION | Full Scale Range LSB Sensitivity
-  - 0 | ± 250 °/s 131 LSB/°/s
-  - 1 | ± 500 °/s 65.5 LSB/°/s
-  - 2 | ± 1000 °/s 32.8 LSB/°/s
-  - 3 | ± 2000 °/s 16.4 LSB/°/s
+  Each 16-bit gyroscope measurement has a full scale contained in
+  $get-gyroscope-full-scale.  This obtained then converted to the LSB
+  multiplier.
   */
   read-gyroscope -> math.Point3f:
     g-fs := get-gyroscope-full-scale          // Obtain range configuration
@@ -574,71 +607,125 @@ class Mpu6050:
   get-whoami -> int:
     return read-register_ REG-WHO-AM-I_ --mask=REG-WHO-AM-I-MASK_ --width=8
 
-
-
-
-
-
-
-
-
   /** UNDOCUMENTED */
 
   /**
-  Set Motion Detection Threshold
+  Set Motion Detection Threshold.
 
   Motion detection threshold: higher = harder to trigger.
   */
-  set-motion-detection-threshold value/int -> none:
+  set-motion-detection-threshold-mg value/int -> none:
     assert: 0 <= value <= 255
-    write-register_ MOT-DETECT-THRESHOLD_ value --width=8
+    write-register_ REG-MOT-DETECT-THRESHOLD_ value --width=8
 
   /**
-  Get configured Motion Detection Threshold
+  Get configured Motion Detection Threshold.
 
   Motion detection threshold: higher = harder to trigger.
   */
-  get-motion-detection-threshold -> int:
-    raw := read-register_ MOT-DETECT-THRESHOLD_ --width=8
+  get-motion-detection-threshold-mg -> int:
+    raw := read-register_ REG-MOT-DETECT-THRESHOLD_ --width=8
     return raw
 
   /**
-  Set Motion Detection Duration
+  Set Motion Detection Duration.
 
   The motion counter runs at 1 kHz, so 1 LSB = 1 ms. A motion interrupt is
   asserted when the counter reaches this duration.
   */
-  set-motion-detection-duration value/int -> none:
+  set-motion-detection-duration-ms value/int -> none:
     assert: 0 <= value <= 255
-    write-register_ MOT-DETECT-DURATION_ value --width=8
+    write-register_ REG-MOT-DETECT-DURATION_ value --width=8
 
   /**
-  Get configured Motion Detection Duration
+  Get configured Motion Detection Duration.
 
   The motion counter runs at 1 kHz, so 1 LSB = 1 ms. A motion interrupt is
   asserted when the counter reaches this duration.
   */
-  get-motion-detection-duration -> int:
-    raw := read-register_ MOT-DETECT-DURATION_ --width=8
+  get-motion-detection-duration-ms -> int:
+    raw := read-register_ REG-MOT-DETECT-DURATION_ --width=8
+    return raw
+
+
+  /**
+  Set Zero Motion Detection Duration.
+
+  This register configures the duration counter threshold for Zero Motion
+  interrupt generation. The duration counter ticks at 16 Hz, therefore the duration
+  has a unit of 1 LSB = 64 ms. The Zero Motion duration counter increments while
+  the absolute value of the accelerometer measurements are each less than the
+  detection threshold. The Zero Motion interrupt is triggered when
+  the Zero Motion duration counter reaches the time count specified in this
+  register.
+  */
+  set-zero-motion-detection-duration-ms ms/int -> none:
+    value/int := (ms / ZMOT-LSB_).to-int
+    if (ms % ZMOT-LSB_) > 0:
+      logger_.warn "set-zero-motion-detection-duration-ms: given $(ms)ms but LSB=$(ZMOT-LSB_) so rounding to $(value * ZMOT-LSB_)"
+    value = clamp-value_ value --lower=0 --upper=255
+    write-register_ REG-ZMOT-DETECT-DURATION_ value --width=8
+
+  /**
+  Get configured Zero Motion Detection Duration.
+
+  See $set-zero-motion-detection-duration-ms
+  */
+  get-zero-motion-detection-duration-ms -> int:
+    raw := read-register_ REG-ZMOT-DETECT-DURATION_ --width=8
+    return raw * ZMOT-LSB_
+
+  /**
+  Set Zero Motion Detection Threshold.
+
+  This register configures the detection threshold for Zero Motion interrupt
+  generation. The mg per LSB increment for ZRMOT_THR can be found in the
+  Electrical Specifications table of the MPU-6000/MPU-6050 Product Specification
+  document.
+
+  Zero Motion is detected when the absolute value of the accelerometer
+  measurements for the 3 axes are each less than the detection threshold. This
+  condition increments the Zero Motion duration counter. The Zero Motion
+  interrupt is triggered when the Zero Motion duration counter reaches the time
+  count specified in $get-zero-motion-detection-duration-ms
+
+  Unlike Free Fall or Motion detection, Zero Motion detection triggers an
+  interrupt both when Zero Motion is first detected and when Zero Motion is no
+  longer detected.  When a zero motion event is detected, a Zero Motion Status
+  will be indicated in the MOT_DETECT_STATUS register (Register 97). When a
+  motion-to-zero-motion condition is detected, the status bit is set to 1. When
+  a zero-motion-to-motion condition is detected, the status bit is set to 0.
+  */
+  set-zero-motion-detection-threshold-mg value/int -> none:
+    value = clamp-value_ value --lower=0 --upper=255
+    write-register_ REG-ZMOT-DETECT-THRESHOLD_ value --width=8
+
+  /**
+  Get configured Zero Motion Threshold.
+
+  See $set-zero-motion-detection-duration-ms
+  */
+  get-zero-motion-detection-threshold-mg -> int:
+    raw := read-register_ REG-ZMOT-DETECT-THRESHOLD_ --width=8
     return raw
 
   /**
-  Set Acceleration Wake Delay
+  Set Acceleration Wake Delay.
 
   Extra acceleration wake delay: 4–7 ms (adds 0–3 ms beyond the default 4 ms).
   */
   set-acceleration-wake-delay-ms ms/int -> none:
-    assert: 4 <= ms <= 7
+    ms = clamp-value_ ms --lower=4 --upper=7
     value/int := ms - 4
-    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
+    write-register_ REG-MOT-DETECT-CTRL_ value --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
 
   /**
-  Get Acceleration Wake Delay
+  Get Acceleration Wake Delay.
 
   Extra acceleration wake delay: 0–3 ms (adds 0–3 ms beyond the default 4 ms).
   */
   get-acceleration-wake-delay-ms -> int:
-    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
+    raw := read-register_ REG-MOT-DETECT-CTRL_ --mask=MOT-DETECT-ACCEL-ON-DELAY-MASK_ --width=8
     ms/int := raw + 4
     return ms
 
@@ -649,7 +736,7 @@ class Mpu6050:
   */
   set-free-fall-count-decrement-rate value/int -> none:
     assert: 0 <= value <= 3
-    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
+    write-register_ REG-MOT-DETECT-CTRL_ value --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
 
   /**
   Get Freefall counter decrement rate.
@@ -657,7 +744,7 @@ class Mpu6050:
   Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
   */
   get-free-fall-count-decrement-rate -> int:
-    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
+    raw := read-register_ REG-MOT-DETECT-CTRL_ --mask=MOT-DETECT-FF-COUNT-MASK_ --width=8
     return raw
 
   /**
@@ -667,7 +754,7 @@ class Mpu6050:
   */
   set-motion-detection-count-decrement-rate value/int -> none:
     assert: 0 <= value <= 3
-    write-register_ MOT-DETECT-CTRL_ value --mask=MOT-DETECT-COUNT-MASK_ --width=8
+    write-register_ REG-MOT-DETECT-CTRL_ value --mask=MOT-DETECT-COUNT-MASK_ --width=8
 
   /**
   Get Motion Detection counter decrement rate.
@@ -675,33 +762,22 @@ class Mpu6050:
   Counter decrement rate: 0=reset to 0; 1=−1; 2=−2; 3=−4 per non-qualifying sample.
   */
   get-motion-detection-count-decrement-rate -> int:
-    raw := read-register_ MOT-DETECT-CTRL_ --mask=MOT-DETECT-COUNT-MASK_ --width=8
+    raw := read-register_ REG-MOT-DETECT-CTRL_ --mask=MOT-DETECT-COUNT-MASK_ --width=8
     return raw
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   /** EXPERIMENTAL */
 
   /**
-  Returns the vector calculation: a magnitude and a heading in 3d space
+  Returns the vector calculation: a magnitude and a heading in 3d space.
+
+  Note that Yaw is currently fixed at null.
   */
   read-acceleration-vector -> AccelOrientation:
     // Get new reading
     accel := read-acceleration
 
     // Magnitude (|accel| in g)
-    magnitude/float := math.sqrt (accel.x * accel.x + accel.y * accel.y + accel.z * accel.z)
+    magnitude/float := magnitude_ accel
 
     // Pitch
     den-pitch/float := (math.sqrt (accel.y*accel.y + accel.z*accel.z)) + eps_
@@ -714,59 +790,30 @@ class Mpu6050:
     roll-degrees/float := roll-radians * deg_
 
     // yaw is undefined from accel alone; keep null (or 0.0 if you prefer)
-    return AccelOrientation magnitude pitch-degrees roll-degrees null
+    return AccelOrientation magnitude roll-degrees pitch-degrees null
 
-
-
-
+  magnitude_ obj/math.Point3f -> float:
+    return math.sqrt (obj.x * obj.x + obj.y * obj.y + obj.z * obj.z)
 
   /**
-  Random Number Generation
+  Whether the device is still or not when called.
+  is-still --samples/int=20 --accel-g-eps/float=0.05 --gyro-dps-max/float=1.0 --sleep-ms/int=10 -> bool:
+    //running-ema := ema.Ema
+    count/int := 0
+    samples.repeat:
+      accel := read-acceleration
+      gyro := read-gyroscope
+      accel-magnitude := magnitude_ accel
+      gyro-magnitude := magnitude_ gyro
+      //running-ema.add accel-magnitude + gyro-magnitude
 
-  Following blog post: https://gist.github.com/bloc97/b55f684d17edd8f50df8e918cbc00f94
-
-  Text: The MPU6050 is a multipurpose Accelerometer and Gyroscope sensor module
-   for the Arduino, it can read raw acceleration from 3 axis and raw turn rate
-   from 3 orientations. To our surprise, its acceleration sensor's noise level
-   far surpasses its resolution, with at least 4 bits of recorded entropy.
-
-  A naive approach to generate a random byte would to directly take the 4 least
-   significant bits of the x and y axis, XORed with the z axis LSBs. //X, Y, Z
-   are 4-bit values from each axis:
-
-   randomByte := ((Y ^ Z) << 4) | (X ^ Z))
-
-  Unfortunately this method is flawed as the distribution and bias of the noise
-   is different and unpredictable between axes, not to mention other sensors of
-   the same model. A simple fix would be to discard some bits and only use 2 bits
-   from each axis, but that would yield only 6 bits of noise per reading, making
-   it impossible to generate a 8-bit number with only one data sample of the
-   accelerometer.
-
-  However with clever transposition, we can achieve 8 bits of randomness using 4
-   bits that are not necessarily the same magnitude from each axis. We are
-   supposing that the upper 2 bits are not always reliable, so we will XOR each
-   axis' higher 2 bits with another axis' lower 2 bits, and vice-versa.  An
-   important property to note is the "piling-up lemma"[4], which states that
-   XORing a good random source with a bad one is not harmful. Since we have 3
-   axis, each having 4 bits, we will obtain 8 bits at the end. This operation
-   is similar to Convolution:
-
-   randomByte := ((X & 0x3) << 6) ^ (Z << 4) ^ (Y << 2) ^ X ^ (Z >> 2)
-
-  This final method achieves state of the art performance for True Random Number
-   Generation on the Arduino, with our tests providing us around 8000 random bits
-   per second on an Arduino Uno.
+      if ((accel-magnitude - 1.0).abs <= accel-g-eps) and (gyro-magnitude <= gyro-dps-max):
+        count += 1
+      else:
+        count = 0
+      sleep --ms=sleep-ms
+    return true
   */
-  get-random-number -> int:
-    // Read acceleromter data
-    a-x := read-register_ REG-ACCEL-XOUT_ --signed
-    a-y := read-register_ REG-ACCEL-YOUT_ --signed
-    a-z := read-register_ REG-ACCEL-ZOUT_ --signed
-
-    // Use the second function described above to return a random byte
-    random-byte := ((a-x & 0x3) << 6) ^ (a-z << 4) ^ (a-y << 2) ^ a-x ^ (a-z >> 2)
-    return random-byte
 
   /**
   Reads and optionally masks/parses register data
@@ -891,14 +938,65 @@ class Mpu6050:
       return out-string
 
 
-  /** EXPERIMENTAL
+/**
+Class used to keep properties
 
+Once created in degrees or radians, getters/setters stay in that method.
+*/
+class AccelOrientation:
+  // range-max_/float ::= ?
+  // range-min_/float ::= ?
+  degrees_/bool ::= ?
+  magnitude_/float? := null
+  pitch_/float? := null
+  roll_/float? := null
+  yaw_/float? := null
+
+  constructor .magnitude_ .pitch_ .roll_ .yaw_  --in-degrees=true --in-radians=false:
+    assert: in-degrees != in-radians
+    if in-radians:
+      degrees_ = false
+      // range-max_ = 2 * math.PI
+      // range-min_ = 0.0
+    else:
+      degrees_ = true
+      // range-max_ = 360.0
+      // range-min_ = 0.0
+
+  in-degrees -> bool:
+    return degrees_
+
+  in-radians -> bool:
+    return not degrees_
+
+  magnitude -> float?:
+    return magnitude_
+
+  magnitude= value/float? -> none:
+    magnitude_ = value
+
+  pitch -> float?:
+    return pitch_
+
+  roll -> float?:
+    return roll_
+
+  yaw -> float?:
+    return yaw_
+
+  /* For now, prevent changes
+  pitch= value/float? -> none:
+    assert: range-min_ <= value < range-max_
+    pitch_ = value
+
+  roll= value/float? -> none:
+    assert: range-min_ <= value < range-max_
+    roll_ = value
+
+  yaw= value/float? -> none:
+    assert: range-min_ <= value < range-max_
+    yaw_ = value
   */
 
-class AccelOrientation:
-  magnitude/float ::= 0.0
-  roll/float ::= 0.0
-  pitch/float ::= 0.0
-  yaw/float? ::= 0.0
-
-  constructor .magnitude .roll .pitch .yaw:
+  to-string -> string:
+    return "mag=$(%0.4f magnitude_) pitch=$(%0.3f pitch_) roll=$(%0.3f roll_) yaw=$(%0.3f yaw_) [$(degrees_ ? "(deg)" : "(rad)")]"

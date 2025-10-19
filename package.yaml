@@ -1,4 +1,9 @@
 name: mpu6050
-description: Support for the InvenSense MPU6000 and MPU6050 I2C MEMS Gyroscope and Accelerometer.
+description: Support for the InvenSense MPU6000 and MPU6050 I2C MEMS Gyroscope and
+  Accelerometer.
 environment:
   sdk: ^2.0.0-alpha.188
+dependencies:
+  ema:
+    url: github.com/milkmansson/toit-ema
+    version: ^1.0.0
