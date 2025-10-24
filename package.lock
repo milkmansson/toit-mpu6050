@@ -1,0 +1,9 @@
+sdk: ^2.0.0-alpha.188
+prefixes:
+  ema: toit-ema
+packages:
+  toit-ema:
+    url: github.com/milkmansson/toit-ema
+    name: ema
+    version: 1.0.0
+    hash: 352b4998688fbbf5a740d3471c2fe5457aa3225e

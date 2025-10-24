@@ -4,10 +4,11 @@
 // work from other authors and sources with permission.  See README.md.
 
 import log
-import math
+import math show *
 import binary
 import serial.device as serial
 import serial.registers as registers
+import io.buffer
 
 class Mpu6050:
   /**  Default $I2C-ADDRESS is 0x68  */
@@ -33,11 +34,10 @@ class Mpu6050:
   static ACCEL-HPF-1-25HZ ::= 3 // On @ 1.25 Hz
   static ACCEL-HPF-0-63HZ ::= 4 // On @ 0.63 Hz
   static ACCEL-HPF-HOLD   ::= 7 // Hold
-
-  static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
-  static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 500deg/s
-  static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 1000deg/s
-  static GYRO-FS-16-4  ::= 3  // 16.4 LSB/deg/s  +/- 2000deg/s
+  static ACCEL-FS-RANGE-2G  ::= 0  // 16384 LSB/g  +/- 2g
+  static ACCEL-FS-RANGE-4G  ::= 1  // 8192 LSB/g  +/- 4g
+  static ACCEL-FS-RANGE-8G  ::= 2  // 4096 LSB/g  +/- 8g
+  static ACCEL-FS-RANGE-16G ::= 3  // 2048 LSB/g  +/- 16g
 
   static REG-GYRO-XOUT_ ::= 0x43
   static REG-GYRO-YOUT_ ::= 0x45
@@ -47,10 +47,10 @@ class Mpu6050:
   static GYRO-Y-SELFTEST-MASK_ ::= 0b01000000
   static GYRO-Z-SELFTEST-MASK_ ::= 0b00100000
   static GYRO-FS-SELECT-MASK_ ::= 0b00011000
-  static ACCEL-FS-RANGE-2G  ::= 0  // 16384 LSB/g  +/- 2g
-  static ACCEL-FS-RANGE-4G  ::= 1  // 8192 LSB/g  +/- 4g
-  static ACCEL-FS-RANGE-8G  ::= 2  // 4096 LSB/g  +/- 8g
-  static ACCEL-FS-RANGE-16G ::= 3  // 2048 LSB/g  +/- 16g
+  static GYRO-FS-131-0 ::= 0  // 131 LSB/deg/s  +/- 250deg/s
+  static GYRO-FS-65-5  ::= 1  // 65.5 LSB/deg/s  +/- 500deg/s
+  static GYRO-FS-32-8  ::= 2  // 32.8 LSB/deg/s  +/- 1000deg/s
+  static GYRO-FS-16-4  ::= 3  // 16.4 LSB/deg/s  +/- 2000deg/s
 
   // Temperature
   static REG-TEMP_ ::= 0x41
@@ -67,7 +67,7 @@ class Mpu6050:
   static PM-CYCLE-MASK_        ::= 0b00100000_00000000
   static PM-TEMP-DISABLE-MASK_ ::= 0b00001000_00000000
   static PM-CLOCK-SOURCE-MASK_ ::= 0b00000111_00000000
-  static PM-LP-WAKE-CTRL-MASK_ ::= 0b00000000_11000000
+  static PM-LP-WAKE-CTRL-MASK_ ::= 0b00000000_10000000
   static PM-STBY-ACCEL-X-MASK_ ::= 0b00000000_00100000
   static PM-STBY-ACCEL-Y-MASK_ ::= 0b00000000_00010000
   static PM-STBY-ACCEL-Z-MASK_ ::= 0b00000000_00001000
@@ -98,27 +98,70 @@ class Mpu6050:
   // Interrupts
   static REG-INTRPT-ENABLE_  ::= 0x38
   static REG-INTRPT-STATUS_  ::= 0x3a
-  static INTRPT-FREEFALL-DETECT    ::= 0b1000_0000
-  static INTRPT-MOTION-DETECT      ::= 0b0100_0000
-  static INTRPT-ZERO-MOTION-DETECT ::= 0b0010_0000
-  static INTRPT-FIFO-OVERFLOW      ::= 0b0001_0000
-  static INTRPT-I2C-MASTER-SOURCES ::= 0b0000_1000
-  static INTRPT-DMP                ::= 0b0000_0010
-  static INTRPT-DATA-READY         ::= 0b0000_0001
-
+  static INTRPT-FREEFALL-DETECT-MASK_    ::= 0b10000000
+  static INTRPT-MOTION-DETECT-MASK_      ::= 0b01000000
+  static INTRPT-ZERO-MOTION-DETECT-MASK_ ::= 0b00100000
+  static INTRPT-FIFO-OVERFLOW-MASK_      ::= 0b00010000
+  static INTRPT-I2C-MASTER-SOURCES-MASK_ ::= 0b00001000
+  static INTRPT-PLL-READY-MASK_          ::= 0b00000100
+  static INTRPT-DMP-MASK_                ::= 0b00000010
+  static INTRPT-DATA-READY-MASK_         ::= 0b00000001
 
   static REG-INTRPT-PIN-CONFIG_ ::= 0x37
-  static INTRPT-PIN-ACTIVE-HL-MASK_       ::= 0b1000_0000  // 0 active high or 1 active low
-  static INTRPT-PIN-PUSH-OPEN-MASK_       ::= 0b0100_0000  // 0 Push Pull or 1 Open Drain
-  static INTRPT-PIN-LATCH-MASK_           ::= 0b0010_0000  // 0 50us pulse or 1 latch
-  static INTRPT-READ-CLEAR-MASK_          ::= 0b0001_0000  // 0 manual clearing or 1 reads clear int
-  static INTRPT-FSYNC-PIN-ACTIVE-HL-MASK_ ::= 0b0000_1000
-  static INTRPT-FSYNC-PIN-ENABLE-MASK_    ::= 0b0000_0100
-  static INTRPT-I2C-BYPASS-ENABLE-MASK_   ::= 0b0000_0010
+  static INTRPT-PIN-ACTIVE-HL-MASK_       ::= 0b10000000  // 0 active high or 1 active low
+  static INTRPT-PIN-PUSH-OPEN-MASK_       ::= 0b01000000  // 0 Push Pull or 1 Open Drain
+  static INTRPT-PIN-LATCH-MASK_           ::= 0b00100000  // 0 50us pulse or 1 latch
+  static INTRPT-READ-CLEAR-MASK_          ::= 0b00010000  // 0 manual clearing or 1 reads clear int
+  static INTRPT-FSYNC-PIN-ACTIVE-HL-MASK_ ::= 0b00001000
+  static INTRPT-FSYNC-PIN-ENABLE-MASK_    ::= 0b00000100
+  static INTRPT-I2C-BYPASS-ENABLE-MASK_   ::= 0b00000010
 
   static REG-CONFIG_  ::= 0x1a
-  static CONFIG-DLPF-CONFIG-MASK_  ::= 0b0000_0111
   static CONFIG-EXT-SYNC-SET-MASK_ ::= 0b0011_1000
+  static CONFIG-DLPF-CONFIG-MASK_  ::= 0b0000_0111
+  static CONFIG-DLPF-0 ::= 0  // ACCEL= 260 Hz, 0 ms   / GYRO= 256 Hz, 0.98 ms / SR= 8 kHz
+  static CONFIG-DLPF-1 ::= 1  // ACCEL= 184 Hz, 2.0 ms / GYRO= 188 Hz, 1.9 ms  / SR= 1 kHz
+  static CONFIG-DLPF-2 ::= 2  // ACCEL= 94 Hz, 3.0 ms  / GYRO= 98 Hz, 2.8 1 ms / SR= 1 kHz
+  static CONFIG-DLPF-3 ::= 3  // ACCEL= 44 Hz, 4.9 ms  / GYRO= 42 Hz, 4.8 1 ms / SR= 1 kHz
+  static CONFIG-DLPF-4 ::= 4  // ACCEL= 21 Hz, 8.5 ms  / GYRO= 20 Hz, 8.3 1 ms / SR= 1 kHz
+  static CONFIG-DLPF-5 ::= 5  // ACCEL= 10 Hz, 13.8 ms / GYRO= 10 Hz, 13.4 ms  / SR= 1 kHz
+  static CONFIG-DLPF-6 ::= 6  // ACCEL= 5 Hz, 19.0 ms  / GYRO= 5 Hz, 18.6 1 ms / SR= 1 kHz
+
+  // Feature/Capabilities Enabled
+  static REG-USER-CTRL_          ::= 0x6A
+  static USER-DMP-ENABLE-MASK_        ::= 0b10000000
+  static USER-FIFO-ENABLE-MASK_       ::= 0b01000000
+  static USER-I2C-MASTER-ENABLE-MASK_ ::= 0b00100000
+  static USER-I2C-IF-DISABLE-MASK_    ::= 0b00010000
+  static USER-DMP-RESET-MASK_         ::= 0b00001000  // Requires USER-DMP-ENABLE_ = 0
+  static USER-FIFO-RESET-MASK_        ::= 0b00000100  // Requires USER-FIFO-ENABLE_ = 0
+  static USER-I2C-MASTER-RESET-MASK_  ::= 0b00000010  // Requires USER-I2C-MASTER-ENABLE_ = 0
+  static USER-SIG-COND-RESET-MASK_    ::= 0b00000001
+
+  // FIFO Function Capability
+  static REG-FIFO-COUNT_ ::= 0x72 // 16-bit
+  static REG-FIFO-RW_ ::= 0x74
+  static REG-FIFO-EN_ ::= 0x23
+  static FIFO-EN-TEMP-MASK_    ::= 0b10000000
+  static FIFO-EN-XG-MASK_      ::= 0b01000000
+  static FIFO-EN-YG-MASK_      ::= 0b00100000
+  static FIFO-EN-ZG-MASK_      ::= 0b00010000
+  static FIFO-EN-ACCEL-MASK_   ::= 0b00001000
+  static FIFO-EN-SLAVE2-MASK_  ::= 0b00000100  // EXT_SENS_DATA associated with Slave 2 to be written to the FIFO
+  static FIFO-EN-SLAVE1-MASK_  ::= 0b00000010  // EXT_SENS_DATA associated with Slave 1 to be written to the FIFO
+  static FIFO-EN-SLAVE0-MASK_  ::= 0b00000001  // EXT_SENS_DATA associated with Slave 0 to be written to the FIFO
+
+
+  // Sampling Rate
+  static REG-SMPLRT-DIVISOR_ ::= 0x19
+
+  // Calibration (16 bit be's)
+  static REG-ACCEL-X-USR-OFFSET_ ::= 0x06
+  static REG-ACCEL-Y-USR-OFFSET_ ::= 0x08
+  static REG-ACCEL-Z-USR-OFFSET_ ::= 0x0a
+  static REG-GYRO-X-USR-OFFSET_ ::= 0x13
+  static REG-GYRO-Y-USR-OFFSET_ ::= 0x15
+  static REG-GYRO-Z-USR-OFFSET_ ::= 0x17
 
   // Undocumented
 
@@ -150,12 +193,13 @@ class Mpu6050:
   //Enable the Zero-Motion interrupt in INT_ENABLE.
 
   // Experimental
-  static deg_/float ::= (180.0 / math.PI)
+  static deg_/float ::= (180.0 / PI)
   static eps_/float ::= 1e-9
 
   // Globals
   reg_/registers.Registers := ?
   logger_/log.Logger := ?
+  dmp-capable_/bool := false
 
   /** Class Constructor:  */
   constructor
@@ -180,8 +224,123 @@ class Mpu6050:
     reset-accelerometer
     enable-temperature
     set-clock-source CLOCK-SRC-INTERNAL-8MHZ // Internal 8MHz Oscillator
-    set-accelerometer-full-scale ACCEL-FS-RANGE-8G      // Set accelerometer range to +/- 8g
+    set-accelerometer-full-scale ACCEL-FS-RANGE-8G // Set accelerometer range to +/- 8g
     set-gyroscope-full-scale GYRO-FS-131-0
+
+
+  /**
+  This register specifies the divider from the gyroscope output rate used to
+  generate the Sample Rate for the MPU-60X0. The sensor register output, FIFO
+  output, DMP sampling, Motion detection, Zero Motion detection, and Free Fall
+  detection are all based on the Sample Rate. The Sample Rate is generated by
+  dividing the gyroscope output rate by SMPLRT_DIV: Sample Rate = Gyroscope
+  Output Rate / (1 + SMPLRT_DIV) where Gyroscope Output Rate = 8kHz when the
+  DLPF is disabled (DLPF_CFG = 0 or 7), and 1kHz when the DLPF is enabled (see
+  Register 26). Note: The accelerometer output rate is 1kHz. This means that for
+  a Sample Rate greater than 1kHz, the same accelerometer sample may be output
+  to the FIFO, DMP, and sensor registers more than once. For a diagram of the
+  gyroscope and accelerometer signal paths, see Section 8 of the MPU-
+  6000/MPU-6050 Product Specification document.
+
+
+  Remember to take care of this:
+    if (st.chip_cfg.lp_accel_mode) {
+        if (rate && (rate <= 40)) {
+            /* Just stay in low-power accel mode. */
+            mpu_lp_accel_mode(rate);
+            return 0;
+        }
+        /* Requested rate exceeds the allowed frequencies in LP accel mode,
+          * switch back to full-power mode.
+        */
+        mpu_lp_accel_mode(0);
+
+  */
+  set-sample-rate-hz hz/int -> none:
+    if is-dmp-enabled:
+      logger_.error "enable-interrupt-data-ready: Cannot set in DMP mode."
+      return
+    dlpf := get-dlpf-config
+    base := 1000
+
+    hz = clamp-value_ hz --lower=4 --upper=1000
+
+    // dlpf = OFF adjust base if necessary:
+    if (dlpf == 0) or (dlpf == 7): base = 8000
+
+    divisor := (base / hz) - 1
+    if divisor < 0: divisor = 0
+    write-register_ REG-SMPLRT-DIVISOR_ divisor --width=8   // REG-SMPLRT-DIV
+
+  get-sampling-rate-hz rate -> int:
+    dlpf := get-dlpf-config
+    base := 1000
+
+    // dlpf = OFF adjust base if necessary:
+    if (dlpf == 0) or (dlpf == 7): base = 8000
+    divisor := read-register_ REG-SMPLRT-DIVISOR_ --width=8
+    return base / (divisor + 1)
+
+  /**
+  Whether Digital Motion Processor is enabled.
+  */
+  is-dmp-enabled -> bool:
+    raw := read-register_ Mpu6050.REG-USER-CTRL_ --mask=USER-DMP-ENABLE-MASK_ --width=8
+    return raw == 1
+
+  /**
+  Sets Accelerometer User calibration values in their respective registers.
+  */
+  set-accelerometer-calibration input/Point3i -> none:
+    if input.x != null:
+      write-register_ REG-ACCEL-X-USR-OFFSET_ input.x --width=16 --signed
+    if input.y != null:
+      write-register_ REG-ACCEL-Y-USR-OFFSET_ input.y --width=16 --signed
+    if input.z != null:
+      write-register_ REG-ACCEL-Z-USR-OFFSET_ input.z --width=16 --signed
+
+  /**
+  Sets Accelerometer scale values from the register.
+  */
+  get-accelerometer-calibration -> Point3i:
+    x := read-register_ REG-ACCEL-X-USR-OFFSET_ --width=16 --signed
+    y := read-register_ REG-ACCEL-Y-USR-OFFSET_ --width=16 --signed
+    z := read-register_ REG-ACCEL-Z-USR-OFFSET_ --width=16 --signed
+    return Point3i x y z
+
+  /**
+  Sets Gyroscope User calibration values in their respective registers.
+  */
+  set-gyroscope-calibration input/Point3i -> none:
+    if input.x != null:
+      write-register_ REG-GYRO-X-USR-OFFSET_ input.x --width=16 --signed
+    if input.y != null:
+      write-register_ REG-GYRO-Y-USR-OFFSET_ input.y --width=16 --signed
+    if input.z != null:
+      write-register_ REG-GYRO-Z-USR-OFFSET_ input.z --width=16 --signed
+
+  /**
+  Sets Gyroscope scale values from the register.
+  */
+  get-gyroscope-calibration -> Point3i:
+    x := read-register_ REG-GYRO-X-USR-OFFSET_ --width=16 --signed
+    y := read-register_ REG-GYRO-Y-USR-OFFSET_ --width=16 --signed
+    z := read-register_ REG-GYRO-Z-USR-OFFSET_ --width=16 --signed
+    return Point3i x y z
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   /**
   Reading clears latching if manual
@@ -196,24 +355,36 @@ class Mpu6050:
   get-motion-detect-status -> int:
     return read-register_ REG-MOTION-DETECT-STATUS_ --width=8
 
+
+  /**
+  Gets Digital Low Pass Filtering Configuration.
+
+  The DLPF_CFG parameter sets the digital low pass filter configuration. It also
+   determines the internal sampling rate used by the device as shown in the table
+   in README.md.
+
+  Note: The accelerometer output rate is 1kHz. This means that for a Sample Rate
+   greater than 1kHz, the same accelerometer sample may be output to the FIFO,
+   DMP, and sensor registers more than once.
+  */
   get-dlpf-config -> int:
     return read-register_ REG-CONFIG_ --mask=CONFIG-DLPF-CONFIG-MASK_ --width=8
 
+  /**
+  Sets Digital Low Pass Filtering Configuration - with DMP Guardrail.
+
+  See $get-dlpf-config.
+  */
   set-dlpf-config config/int -> none:
     assert: 0 <= config <= 7
-    write-register_ REG-CONFIG_ config --mask=CONFIG-DLPF-CONFIG-MASK_  --width=8
+    if is-dmp-enabled:
+      logger_.error "set-dlpf-config: Cannot set while DMP enabled."
+      return
 
-  enable-motion-detection-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-MOTION-DETECT --width=8
+    if config == CONFIG-DLPF-0:
+      logger_.warn "set-dlpf-config: Accel sample rate fixed at 1khz.  With 8khz, Accel samples may show more than once."
 
-  disable-motion-detection-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-MOTION-DETECT  --width=8
-
-  enable-zero-motion-detection-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-ZERO-MOTION-DETECT --width=8
-
-  disable-zero-motion-detection-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-ZERO-MOTION-DETECT  --width=8
+    write-register_ Mpu6050.REG-CONFIG_ config --mask=Mpu6050.CONFIG-DLPF-CONFIG-MASK_  --width=8
 
   /**
   Resets the device.
@@ -324,23 +495,28 @@ class Mpu6050:
   Each 16-bit accelerometer measurement has a full scale defined in
   $ACCEL-FS-SELECT-MASK_ in register $REG-ACCEL-CONFIG_. For each full scale
   setting, the accelerometers’ sensitivity changes per LSB.
+
+  When DMP Driver is used, these work, and give low-level and fused data paths.
+  However, When DMP is enabled, these reads are asynchronous — "off by a few"
+  from what the DMP sees internally.
   */
-  read-acceleration -> math.Point3f:
-    a-fs := get-accelerometer-full-scale      // Obtain range configuration
-    a-lsb := convert-accel-fs-to-value_ a-fs  // Obtain multiplier
-    a-x := (read-register_ REG-ACCEL-XOUT_ --signed).to-float / a-lsb
-    a-y := (read-register_ REG-ACCEL-YOUT_ --signed).to-float / a-lsb
-    a-z := (read-register_ REG-ACCEL-ZOUT_ --signed).to-float / a-lsb
-    return math.Point3f a-x a-y a-z
+  read-accelerometer --set/Point3i=(read-accelerometer-raw) -> Point3f:
+    data/Point3i := ?
+    fs := get-accelerometer-full-scale      // Obtain range configuration
+    lsb := convert-accel-fs-to-value_ fs    // Obtain multiplier
+    x := set.x.to-float / lsb
+    y := set.y.to-float / lsb
+    z := set.z.to-float / lsb
+    return Point3f x y z
 
   /**
   Reads acceleration at this moment, returning raw register reads.
   */
-  read-raw-acceleration -> math.Point3f:
-    a-x := read-register_ REG-ACCEL-XOUT_ --signed
-    a-y := read-register_ REG-ACCEL-YOUT_ --signed
-    a-z := read-register_ REG-ACCEL-ZOUT_ --signed
-    return math.Point3f a-x a-y a-z
+  read-accelerometer-raw -> Point3i:
+    x := read-register_ REG-ACCEL-XOUT_ --signed
+    y := read-register_ REG-ACCEL-YOUT_ --signed
+    z := read-register_ REG-ACCEL-ZOUT_ --signed
+    return Point3i x y z
 
   /**
   Set Accelerometer High Pass Filter
@@ -376,23 +552,27 @@ class Mpu6050:
     return read-register_ REG-ACCEL-CONFIG_ --mask=ACCEL-FS-SELECT-MASK_ --width=8
 
   /**
-  Sets Accelerometer scale values from the register.
+  Sets Accelerometer scale values from the register - with DMP guardrail.
   */
   set-accelerometer-full-scale raw/int -> none:
     assert: 0 <= raw <= 3
-    write-register_ REG-ACCEL-CONFIG_ raw --mask=ACCEL-FS-SELECT-MASK_ --width=8
+    if is-dmp-enabled:
+      logger_.warn "set-accelerometer-full-scale: DMP Mode requires ACCEL-FS-RANGE-2G (0x00)" --tags={ "requested" : raw }
+      write-register_ Mpu6050.REG-ACCEL-CONFIG_ Mpu6050.ACCEL-FS-RANGE-2G --mask=Mpu6050.ACCEL-FS-SELECT-MASK_ --width=8
+    else:
+      write-register_ Mpu6050.REG-ACCEL-CONFIG_ raw --mask=Mpu6050.ACCEL-FS-SELECT-MASK_ --width=8
 
   /**
   Converts Accelerometer scale selectors to actual values/multipliers.
   */
-  convert-accel-fs-to-value_ config/int -> int:
+  convert-accel-fs-to-value_ config/int -> float:
     // AFS_SEL Full Scale Range LSB Sensitivity
     assert: 0 <= config <= 3
-    if config == ACCEL-FS-RANGE-2G: return 16384 // ±2g 16384 LSB/g
-    if config == ACCEL-FS-RANGE-4G: return 8192  // ±4g 8192 LSB/g
-    if config == ACCEL-FS-RANGE-8G: return 4096  // ±8g 4096 LSB/g
-    if config == ACCEL-FS-RANGE-16G: return 2048  // ±16g 2048 LSB/g
-    return 0
+    if config == ACCEL-FS-RANGE-2G: return 16384.0 // ±2g 16384 LSB/g
+    if config == ACCEL-FS-RANGE-4G: return 8192.0  // ±4g 8192 LSB/g
+    if config == ACCEL-FS-RANGE-8G: return 4096.0  // ±8g 4096 LSB/g
+    if config == ACCEL-FS-RANGE-16G: return 2048.0  // ±16g 2048 LSB/g
+    return 0.0
 
   execute-accel-selftest -> none:
     execute-accel-selftest-x
@@ -439,23 +619,51 @@ class Mpu6050:
   /**
   Sets Interrupts
   */
-  enable-data-ready-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-DATA-READY --width=8
 
-  disable-data-ready-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-DATA-READY --width=8
+  show-interrupts -> none:
+    width := 8
+    interrupts := read-register_ REG-INTRPT-ENABLE_ --width=width
+    logger_.info "show-interrupts: $(bits-16_ interrupts --min-display-bits=width)"
 
-  enable-i2c-master-sources-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-I2C-MASTER-SOURCES --width=8
+  enable-interrupt-motion-detection -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-MOTION-DETECT-MASK_ --width=8
 
-  disable-i2c-master-sources-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-I2C-MASTER-SOURCES --width=8
+  disable-interrupt-motion-detection -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-MOTION-DETECT-MASK_  --width=8
 
-  enable-fifo-overflow-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-FIFO-OVERFLOW --width=8
+  enable-interrupt-zero-motion-detection -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-ZERO-MOTION-DETECT-MASK_ --width=8
 
-  disable-fifo-overflow-interrupt -> none:
-    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-FIFO-OVERFLOW --width=8
+  disable-interrupt-zero-motion-detection -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-ZERO-MOTION-DETECT-MASK_  --width=8
+
+  enable-interrupt-dmp -> none:
+    logger_.error "enable-interrupt-dmp: DMP Mode not available in this driver." --tags={"driver":"mpu6050"}
+
+  disable-interrupt-dmp -> none:
+    logger_.error "enable-interrupt-dmp: DMP Mode not available in this driver." --tags={"driver":"mpu6050"}
+
+  enable-interrupt-data-ready -> none:
+    if is-dmp-enabled:
+      logger_.error "enable-interrupt-data-ready: Cannot use in DMP mode."
+      return
+    else:
+      write-register_ Mpu6050.REG-INTRPT-ENABLE_ 1 --mask=Mpu6050.INTRPT-DATA-READY-MASK_ --width=8
+
+  disable-interrupt-data-ready -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-DATA-READY-MASK_ --width=8
+
+  enable-interrupt-i2c-master-sources -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-I2C-MASTER-SOURCES-MASK_ --width=8
+
+  disable-interrupt-i2c-master-sources -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-I2C-MASTER-SOURCES-MASK_ --width=8
+
+  enable-interrupt-fifo-overflow -> none:
+    write-register_ REG-INTRPT-ENABLE_ 1 --mask=INTRPT-FIFO-OVERFLOW-MASK_ --width=8
+
+  disable-interrupt-fifo-overflow -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --mask=INTRPT-FIFO-OVERFLOW-MASK_ --width=8
 
   set-interrupt-pin-active-high -> none:
     write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-PIN-ACTIVE-HL-MASK_ --width=8
@@ -493,6 +701,9 @@ class Mpu6050:
   disable-fsync-pin -> none:
     write-register_ REG-INTRPT-PIN-CONFIG_ 0 --mask=INTRPT-FSYNC-PIN-ENABLE-MASK_ --width=8
 
+  disable-all-interrupts -> none:
+    write-register_ REG-INTRPT-ENABLE_ 0 --width=8
+
   /**
   Enables I2C bypass.
 
@@ -520,13 +731,22 @@ class Mpu6050:
   $get-gyroscope-full-scale.  This obtained then converted to the LSB
   multiplier.
   */
-  read-gyroscope -> math.Point3f:
-    g-fs := get-gyroscope-full-scale          // Obtain range configuration
-    g-lsb := convert-gyro-fs-to-value_ g-fs   // Obtain multiplier
-    g-x := (read-register_ REG-GYRO-XOUT_ --signed) / g-lsb
-    g-y := (read-register_ REG-GYRO-YOUT_ --signed) / g-lsb
-    g-z := (read-register_ REG-GYRO-ZOUT_ --signed) / g-lsb
-    return math.Point3f g-x g-y g-z
+  read-gyroscope  --set/Point3i=(read-gyroscope-raw) -> Point3f:
+    fs := get-gyroscope-full-scale          // Obtain range configuration
+    lsb := convert-gyro-fs-to-value_ fs     // Obtain multiplier
+    x := set.x.to-float / lsb
+    y := set.y.to-float / lsb
+    z := set.z.to-float / lsb
+    return Point3f x y z
+
+  /**
+  Reads acceleration at this moment, returning raw register reads.
+  */
+  read-gyroscope-raw -> Point3i:
+    x := read-register_ REG-GYRO-XOUT_ --signed
+    y := read-register_ REG-GYRO-YOUT_ --signed
+    z := read-register_ REG-GYRO-ZOUT_ --signed
+    return Point3i x y z
 
   /**
   Gets Gyroscope scale values from the register.
@@ -535,11 +755,15 @@ class Mpu6050:
     return read-register_ REG-GYRO-CONFIG_ --mask=GYRO-FS-SELECT-MASK_ --width=8
 
   /**
-  Sets Gyroscope scale values from the register.
+  Sets Gyroscope scale values from the register - with DMP guardrail.
   */
   set-gyroscope-full-scale raw/int -> none:
     assert: 0 <= raw <= 3
-    write-register_ REG-GYRO-CONFIG_ raw --mask=GYRO-FS-SELECT-MASK_ --width=8
+    if is-dmp-enabled:
+      logger_.warn "set-gyroscope-full-scale: DMP Mode requires GYRO-FS-16-4 (0x03)" --tags={ "requested" : raw }
+      write-register_ REG-GYRO-CONFIG_ GYRO-FS-16-4 --mask=GYRO-FS-SELECT-MASK_ --width=8
+    else:
+      write-register_ REG-GYRO-CONFIG_ raw --mask=GYRO-FS-SELECT-MASK_ --width=8
 
   /**
   Converts Gyroscope scale selectors to actual values/multipliers.
@@ -765,6 +989,204 @@ class Mpu6050:
     raw := read-register_ REG-MOT-DETECT-CTRL_ --mask=MOT-DETECT-COUNT-MASK_ --width=8
     return raw
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /**
+  Enables FIFO Buffer Capability.
+
+  The FIFO buffer cannot be written to or read from while disabled. The FIFO
+  buffer's state does not change unless the device is power cycled.  Reset is
+  performed as part of enabling FIFO.
+  */
+  enable-fifo -> none:
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-FIFO-RESET-MASK_ --width=8
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-FIFO-ENABLE-MASK_ --width=8
+
+  /**
+  Disables FIFO Buffer Capability.
+
+  The FIFO buffer cannot be written to or read from while disabled.  After being
+  disabled, the FIFO buffer's state does not change unless the device is power
+  cycled.
+  */
+  disable-fifo -> none:
+    write-register_ REG-USER-CTRL_ 0 --mask=USER-FIFO-ENABLE-MASK_ --width=8
+    // Unroute all sources from FIFO (disable all FIFO enabled sources)
+    write-register_ REG-FIFO-EN_ 0 --width=8
+
+  /**
+  Clears the FIFO buffer.
+  */
+  clear-fifo -> none:
+    sources := read-register_ REG-FIFO-EN_ --width=8
+    enabled := read-register_ REG-USER-CTRL_ --mask=USER-FIFO-ENABLE-MASK_ --width=8
+    write-register_ REG-FIFO-EN_ 0 --width=8
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-FIFO-RESET-MASK_ --width=8
+
+    if enabled == 1:
+      write-register_ REG-USER-CTRL_ enabled --mask=USER-FIFO-ENABLE-MASK_ --width=8
+    if (read-register_ REG-FIFO-EN_ --width=8) != sources:
+      write-register_ REG-FIFO-EN_ sources --width=8
+
+    // Clear any existing interrupts
+    nothing := read-register_ REG-INTRPT-STATUS_ --width=8
+
+  /**
+  Enables I2C Master Mode.
+
+  When set to 1, this bit enables I2C Master Mode. When this bit is cleared to 0, the auxiliary I2C bus lines (AUX_DA and AUX_CL) are logically driven by the primary I2C bus (SDA and SCL).
+  */
+  enable-i2c-master -> none:
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-I2C-MASTER-ENABLE-MASK_ --width=8
+
+  /**
+  Disables I2C Master Mode.
+
+  When disabled, the auxiliary I2C bus lines (XDA and XCL) are logically
+  driven by the primary I2C bus (SDA and SCL).
+  */
+  disable-i2c-master -> none:
+    write-register_ REG-USER-CTRL_ 0 --mask=USER-I2C-MASTER-ENABLE-MASK_ --width=8
+
+  /**
+  Resets FIFO capability.
+
+  Must be off to reset - reads previous state, disables and restores the
+   previous state after reset.
+  */
+  reset-fifo -> none:
+    enabled := read-register_ REG-FIFO-EN_ --mask=USER-FIFO-ENABLE-MASK_ --width=8
+    write-register_ REG-USER-CTRL_ 0 --mask=USER-FIFO-ENABLE-MASK_ --width=8
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-FIFO-RESET-MASK_ --width=8
+    sleep --ms=100
+    if enabled == 1:
+      write-register_ REG-USER-CTRL_ enabled --mask=USER-FIFO-ENABLE-MASK_ --width=8
+
+  /**
+  Resets I2C Master capability.
+
+  Must be off to reset - reads previous state, disables and restores the
+   previous state after reset.
+  */
+  reset-i2c-master -> none:
+    enabled := read-register_ REG-USER-CTRL_ --mask=USER-I2C-MASTER-ENABLE-MASK_ --width=8
+    write-register_ REG-USER-CTRL_ 0 --mask=USER-I2C-MASTER-ENABLE-MASK_ --width=8
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-I2C-MASTER-RESET-MASK_ --width=8
+    sleep --ms=100
+    if enabled == 1:
+      write-register_ REG-USER-CTRL_ enabled --mask=USER-I2C-MASTER-ENABLE-MASK_ --width=8
+
+  /**
+  Resets Signal Paths.
+
+  Resets the signal paths for all sensors (gyroscopes, accelerometers, and
+   temperature sensor). This operation will also clear the sensor registers.
+   When resetting only the signal path (and not the sensor registers), please
+   use Register 104, SIGNAL_PATH_RESET.
+  */
+  reset-signal-paths -> none:
+    write-register_ REG-USER-CTRL_ 1 --mask=USER-SIG-COND-RESET-MASK_ --width=8
+
+  /**
+  Gives the number of bytes stored in the FIFO buffer.
+
+  This number is in turn the number of bytes that can be read from the FIFO
+  buffer.  It is directly proportional to the number of samples available given
+  the set of sensor data bound to be stored in the FIFO (register 35 and 36).
+  */
+  get-fifo-count -> int:
+    raw := read-register_ REG-FIFO-COUNT_ --width=16
+    return raw
+
+  /**
+  Collects all available bytes in the byte array and adds them all to the end of
+   the supplied deque for user processing.
+  */
+  fifo-read deque/Deque -> Deque:
+    bytes-to-read := get-fifo-count
+    deque.reserve (deque.size + bytes-to-read)      // Reserve to reduce reallocs
+    //while byte-buffer.is-empty: // may never end
+    bytes-to-read.repeat:
+      deque.add (read-register_ REG-FIFO-RW_ --width=8)
+    return deque
+
+  /**
+  Collects and returns fifo queue, iff fifo queue data is accelerometer data.
+
+  Interprets, maths out and returns a Deque of Point3f's (accelerometer 3tuples
+   converted from i16-be, and into accelerometer data via LSBs etc.)
+  */
+  read-accelerometer-fifo --max-samples/int=32 -> Deque:
+    fifo-channels-enabled := read-register_ REG-FIFO-EN_ --width=8
+    if fifo-channels-enabled != FIFO-EN-ACCEL-MASK_:
+      logger_.error "fifo-read-accel: can't run with wrong channels." --tags={"channels":fifo-channels-enabled}
+      return Deque
+    out := Deque
+
+    // Get Data
+    fifo-data := Deque
+    fifo-data = fifo-read fifo-data
+
+    tuples/int := (fifo-data.size / 6)    // floor
+    if tuples > max-samples: tuples = max-samples
+
+    tuples.repeat:
+      x := i16-be_ fifo-data.remove-first fifo-data.remove-first --signed=true
+      y := i16-be_ fifo-data.remove-first fifo-data.remove-first --signed=true
+      z := i16-be_ fifo-data.remove-first fifo-data.remove-first --signed=true
+      raw-accel := Point3i x y z
+      accel := read-accelerometer --set=raw-accel
+      out.add accel
+    return out
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   /** EXPERIMENTAL */
 
   /**
@@ -772,48 +1194,35 @@ class Mpu6050:
 
   Note that Yaw is currently fixed at null.
   */
-  read-acceleration-vector -> AccelOrientation:
+  read-acceleration-vector -> Vector4f:
     // Get new reading
-    accel := read-acceleration
+    accel := read-accelerometer
 
     // Magnitude (|accel| in g)
-    magnitude/float := magnitude_ accel
+    magnitude/float := magnitude accel
 
     // Pitch
-    den-pitch/float := (math.sqrt (accel.y*accel.y + accel.z*accel.z)) + eps_
-    pitch-radians/float := math.atan2 accel.x den-pitch
+    den-pitch/float := (sqrt (accel.y*accel.y + accel.z*accel.z)) + eps_
+    pitch-radians/float := atan2 accel.x den-pitch
     pitch-degrees/float := pitch-radians * deg_
 
     // roll: rotation around X (left/right)
-    den-roll/float := (math.sqrt (accel.x * accel.x + accel.z * accel.z)) + eps_
-    roll-radians/float := math.atan2 accel.y den-roll
+    den-roll/float := (sqrt (accel.x * accel.x + accel.z * accel.z)) + eps_
+    roll-radians/float := atan2 accel.y den-roll
     roll-degrees/float := roll-radians * deg_
 
     // yaw is undefined from accel alone; keep null (or 0.0 if you prefer)
-    return AccelOrientation magnitude roll-degrees pitch-degrees null
+    return Vector4f magnitude roll-degrees pitch-degrees null
 
-  magnitude_ obj/math.Point3f -> float:
-    return math.sqrt (obj.x * obj.x + obj.y * obj.y + obj.z * obj.z)
+  magnitude obj/Point3f -> float:
+    return sqrt (obj.x * obj.x + obj.y * obj.y + obj.z * obj.z)
 
-  /**
-  Whether the device is still or not when called.
-  is-still --samples/int=20 --accel-g-eps/float=0.05 --gyro-dps-max/float=1.0 --sleep-ms/int=10 -> bool:
-    //running-ema := ema.Ema
-    count/int := 0
-    samples.repeat:
-      accel := read-acceleration
-      gyro := read-gyroscope
-      accel-magnitude := magnitude_ accel
-      gyro-magnitude := magnitude_ gyro
-      //running-ema.add accel-magnitude + gyro-magnitude
+  normalize vector/Point3f -> Point3f:
+    mag := magnitude vector
+    if mag <= 1e-9: return Point3f 0.0 0.0 0.0
+    inv := 1.0 / mag
+    return Point3f (vector.x * inv) (vector.y * inv) (vector.z * inv)
 
-      if ((accel-magnitude - 1.0).abs <= accel-g-eps) and (gyro-magnitude <= gyro-dps-max):
-        count += 1
-      else:
-        count = 0
-      sleep --ms=sleep-ms
-    return true
-  */
 
   /**
   Reads and optionally masks/parses register data
@@ -917,6 +1326,18 @@ class Mpu6050:
     return value
 
   /**
+  Parse big-endian 16bit from two separate bytes - eg when reading from FIFO.
+  */
+  i16-be_ high-byte/int low-byte/int --signed/bool=false -> int:
+    high := high-byte & 0xFF
+    low := low-byte & 0xFF
+    value := (high << 8) | low
+    if signed:
+      return (value >= 0x8000) ? (value - 0x10000) : value
+    else:
+      return value
+
+  /**
   Provides strings to display bitmasks nicely when testing.
   */
   bits-16_ x/int --min-display-bits/int=0 -> string:
@@ -938,65 +1359,179 @@ class Mpu6050:
       return out-string
 
 
-/**
-Class used to keep properties
-
-Once created in degrees or radians, getters/setters stay in that method.
-*/
-class AccelOrientation:
-  // range-max_/float ::= ?
-  // range-min_/float ::= ?
-  degrees_/bool ::= ?
-  magnitude_/float? := null
-  pitch_/float? := null
-  roll_/float? := null
-  yaw_/float? := null
-
-  constructor .magnitude_ .pitch_ .roll_ .yaw_  --in-degrees=true --in-radians=false:
-    assert: in-degrees != in-radians
-    if in-radians:
-      degrees_ = false
-      // range-max_ = 2 * math.PI
-      // range-min_ = 0.0
-    else:
-      degrees_ = true
-      // range-max_ = 360.0
-      // range-min_ = 0.0
-
-  in-degrees -> bool:
-    return degrees_
-
-  in-radians -> bool:
-    return not degrees_
-
-  magnitude -> float?:
-    return magnitude_
-
-  magnitude= value/float? -> none:
-    magnitude_ = value
-
-  pitch -> float?:
-    return pitch_
-
-  roll -> float?:
-    return roll_
-
-  yaw -> float?:
-    return yaw_
-
-  /* For now, prevent changes
-  pitch= value/float? -> none:
-    assert: range-min_ <= value < range-max_
-    pitch_ = value
-
-  roll= value/float? -> none:
-    assert: range-min_ <= value < range-max_
-    roll_ = value
-
-  yaw= value/float? -> none:
-    assert: range-min_ <= value < range-max_
-    yaw_ = value
+  /**
+  Parse big-endian 32bit from byte array  - eg when reading from a packet.
   */
+  i32-be_ packet/ByteArray --start/int --signed/bool=false -> int:
+    if (start < 0) or (start + 3) >= packet.size:
+      logger_.error "i32-be_: Out of bounds"
+      throw "i32-be_: out of bounds."
 
-  to-string -> string:
-    return "mag=$(%0.4f magnitude_) pitch=$(%0.3f pitch_) roll=$(%0.3f roll_) yaw=$(%0.3f yaw_) [$(degrees_ ? "(deg)" : "(rad)")]"
+    // Mask each byte just in case
+    byte-0 := packet[start]      & 0xFF
+    byte-1 := packet[start + 1]  & 0xFF
+    byte-2 := packet[start + 2]  & 0xFF
+    byte-3 := packet[start + 3]  & 0xFF
+
+    value := (byte-0 << 24) | (byte-1 << 16) | (byte-2 << 8) | byte-3
+
+    if signed and ((value & 0x80000000) != 0):
+      return value - 0x1_0000_0000
+    else:
+      return value
+
+
+/*
+
+// Stores the reference “down” (gravity) direction in body frame and thresholds.
+class OrientationProfile:
+  // Saved unit vector of gravity in the neutral pose (points "down" in body frame)
+  down0_/math.Point3f ::= math.Point3f 0.0 0.0 1.0
+
+  // Thresholds in degrees, with hysteresis
+  tilt-up-thresh-deg_/float ::= 12.0     // tilt toward down0 more than this => UP
+  tilt-down-thresh-deg_/float ::= 12.0   // tilt away from down0 more than this => DOWN
+  hysteresis-deg_/float ::= 3.0          // prevents flicker around thresholds
+
+  // Internal latched state for hysteresis
+  last_/TiltIntent ::= TiltIntent.NEUTRAL
+
+  // Low-pass filter to estimate gravity
+  lpf_/GravityLPF := GravityLPF --alpha=0.15
+
+  // --- Calibration: call once while device is held still in the neutral pose ---
+  calibrate read-accel/func()->math.Point3f --samples/int=100 --sleep-ms/int=5 -> none:
+    sum := math.Point3f 0.0 0.0 0.0
+    i := 0
+    while i < samples:
+      a := read-accel()         // should return accel in g-units
+      sum = math.Point3f (sum.x + a.x) (sum.y + a.y) (sum.z + a.z)
+      sleep --ms=sleep-ms
+      i += 1
+    avg := math.Point3f (sum.x / samples) (sum.y / samples) (sum.z / samples)
+    down0_ = normalize avg      // store "down" vector
+    lpf_.reset avg
+
+  // --- Evaluate current intent: UP / DOWN / NEUTRAL ---
+  evaluate read-accel/func()->math.Point3f -> TiltIntent:
+    a := read-accel()
+    g := lpf_.update a
+    if (g.x == 0.0 and g.y == 0.0 and g.z == 0.0): return last_
+
+    curDown := normalize g
+    // angle between current down and saved down (degrees)
+    cosTheta := curDown * down0_
+    cosTheta = (cosTheta > 1.0) ? 1.0 : ((cosTheta < -1.0) ? -1.0 : cosTheta)
+    theta := math.acos cosTheta
+    thetaDeg := theta * (180.0 / math.PI)
+
+    // “Toward down0” = small angle; “away” = large angle.
+    upEnter  := (thetaDeg <= (tilt-up-thresh-deg_ - hysteresis-deg_))
+    upExit   := (thetaDeg <= (tilt-up-thresh-deg_ + hysteresis-deg_))
+    downEnter:= (thetaDeg >= (tilt-down-thresh-deg_ + hysteresis-deg_))
+    downExit := (thetaDeg >= (tilt-down-thresh-deg_ - hysteresis-deg_))
+
+    // 3-state latch with hysteresis
+    if last_ == TiltIntent.UP:
+      if upExit: return TiltIntent.UP else: last_ = TiltIntent.NEUTRAL
+    if last_ == TiltIntent.DOWN:
+      if downExit: return TiltIntent.DOWN else: last_ = TiltIntent.NEUTRAL
+
+    // Neutral: check entries
+    if upEnter:
+      last_ = TiltIntent.UP
+    else if downEnter:
+      last_ = TiltIntent.DOWN
+    else:
+      last_ = TiltIntent.NEUTRAL
+
+    return last_
+
+  // Optional: let callers tweak thresholds/hysteresis at runtime
+  set-thresholds --up-deg/float --down-deg/float --hyst-deg/float -> none:
+    if up-deg != null:   tilt-up-thresh-deg_ = up-deg
+    if down-deg != null: tilt-down-thresh-deg_ = down-deg
+    if hyst-deg != null: hysteresis-deg_      = hyst-deg
+
+
+
+
+// Simple exponential low-pass for accel -> gravity estimate.
+class GravityLPF:
+  g_/math.Point3f := math.Point3f 0.0 0.0 0.0
+  alpha_/float := 0.1   // 0..1; higher = less smoothing
+
+  constructor --alpha/float=0.1:
+    alpha_ = alpha
+
+  reset vector/math.Point3f -> none:
+    g_ = vector
+
+  update vector/math.Point3f -> math.Point3f:
+    x := alpha_ * vector.x + (1 - alpha_) * g_.x
+    y := alpha_ * vector.y + (1 - alpha_) * g_.y
+    z := alpha_ * vector.z + (1 - alpha_) * g_.z
+    g_ = math.Point3f x y z
+    return g_
+
+class TiltIntent:
+//enum TiltIntent { DOWN, NEUTRAL, UP }
+
+
+*/
+
+/**
+Small class to hold int versions of Point3f around
+*/
+class Point3i:
+  x/int? := null
+  y/int? := null
+  z/int? := null
+
+  constructor .x/int? .y/int? .z/int?:
+
+/**
+Small class to hold quaternion floats
+*/
+
+class Vector4i:
+  w/int? := null
+  x/int? := null
+  y/int? := null
+  z/int? := null
+
+  constructor .w/int? .x/int? .y/int? .z/int?:
+
+class Vector4f:
+  w/float? := null
+  x/float? := null
+  y/float? := null
+  z/float? := null
+
+  constructor .w/float? .x/float? .y/float? .z/float?:
+
+  getConjugate -> Vector4f:
+    return Vector4f w -x -y -z
+
+  magnitude -> float:
+    return sqrt (w*w + x*x + y*y + z*z)
+
+  normalize -> none:
+    mag := magnitude
+    w /= mag
+    x /= mag
+    y /= mag
+    z /= mag
+    return
+
+  operator * q/Vector4f -> Vector4f:
+    // Quaternion multiplication is defined by:
+    //     (Q1 * Q2).w = (w1w2 - x1x2 - y1y2 - z1z2)
+    //     (Q1 * Q2).x = (w1x2 + x1w2 + y1z2 - z1y2)
+    //     (Q1 * Q2).y = (w1y2 - x1z2 + y1w2 + z1x2)
+    //     (Q1 * Q2).z = (w1z2 + x1y2 - y1x2 + z1w2
+    new-w := w*q.w - x*q.x - y*q.y - z*q.z  // new w
+    new-x := w*q.x + x*q.w + y*q.z - z*q.y  // new x
+    new-y := w*q.y - x*q.z + y*q.w + z*q.x  // new y
+    new-z := w*q.z + x*q.y - y*q.x + z*q.w  // new z
+    return Vector4f new-w new-x new-y new-z

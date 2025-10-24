@@ -1,6 +1,9 @@
 # Toit driver for Invensense (TDK) MPU6000 and MPU6050 I2C Accelerometer and Gyroscope
-
-
+The MPU6000 and MPU6050 are compact 6-axis motion tracking sensors that combine
+a 3-axis accelerometer and a 3-axis gyroscope on a single chip.  They measures
+linear acceleration and rotational velocity.  They communicate via I²C (or SPI
+depending on model).  It's a cheap and popular choice for projects that need
+motion detection, orientation sensing, or gesture control.
 
 ![Front and back of an as5600](images/mpu6050.jpg)
 
@@ -8,6 +11,9 @@
 > This device is allegedly obsolete.  It is quoted as being noisy and outdated.
 > However they are still cheap, widely available, and good enough for many
 > projects such as mine, making the driver worth the time to write.
+
+A practical implementation of this device is shown in this ['Digital
+Dice'](https://github.com/milkmansson/project-dice) project.
 
 ## Features
 
@@ -76,7 +82,11 @@ value of g (gravitational acceleration - 9.80665 m/s²), for that axis:
 This device can provide alerts when going from zero motion into motion, and vice
 versa.  There are thresholds determining how much motion is necessary to trigger
 each of these.  Its a somewhat undocumented feature however it functions very
-well using information from the community.
+well using information from the community. A simple example:
+```Toit
+
+
+```
 
 ### Temperature gauge
 The device has its own thermal sensor. Its range is good for –40C to +85C with
@@ -110,7 +120,7 @@ undocumented features are:
 - Others...
 
 ### Sources
-Links to sources of information about these:
+Links to sources of information about its undocumented features:
 - [Arduino Forums Post 'Reverse Engineering Undocumented MPU6050 Registers'](https://forum.arduino.cc/t/reverse-engineering-undocumented-mpu6050-registers/698986/2)
 - [MPU6050 register list on I2CDevLib.com](https://www.i2cdevlib.com/devices/mpu6050#registers)
 
@@ -159,6 +169,10 @@ to 1, in whatever direction that it comes to rest.  The other values (pitch/roll
 - Full AHRS implementation. See: [Open Source IMU and AHRS algorithms](https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/) and [Fusion Library](https://github.com/xioTechnologies/Fusion)
 
 ## Links
+- [MPU6050 Explained](https://mjwhite8119.github.io/Robots/mpu6050) an excellent
+  article about the boards function and use.
+- [MPU6050 Driver](https://github.com/Brazilian-Institute-of-Robotics/mpu6050_driver/tree/master) for the ROS 'Robot Operating System'.
+- [jrowberg's Code I2C Device Library](https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050)
 - [Datasheet](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet1.pdf)
 - [Register Map](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf)
 
