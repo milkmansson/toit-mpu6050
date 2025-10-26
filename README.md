@@ -23,7 +23,7 @@ agreement/wall with TDK that no longer exists.
 
 #### Current Version:
 As a baseline, the base class `Mpu6050` (in
-[`/src/mpu6050.toit`](https://github.com/milkmansson/toit-mpu6050/src/mpu6050.toit)) contains any/all features without
+[`/src/mpu6050.toit`](https://github.com/milkmansson/toit-mpu6050/blob/main/src/mpu6050.toit)) contains any/all features without
 resorting to DMP/MotionApps.  Non-DMP (eg, in toit code in the driver/class)
 implementations of features found in DMP funtions are also here.  It functions
 well so far for individual reads, interrupts, motion events, fifo, etc, even if
