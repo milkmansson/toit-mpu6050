@@ -23,15 +23,15 @@ agreement/wall with TDK that no longer exists.
 
 #### Current Version:
 As a baseline, the base class `Mpu6050` (in
-[`/src/mpu6050.toit`](src/mpu6050.toit)) contains any/all features without
+[`/src/mpu6050.toit`](https://github.com/milkmansson/toit-mpu6050/src/mpu6050.toit)) contains any/all features without
 resorting to DMP/MotionApps.  Non-DMP (eg, in toit code in the driver/class)
 implementations of features found in DMP funtions are also here.  It functions
 well so far for individual reads, interrupts, motion events, fifo, etc, even if
 it might be improved over time.
 
 #### Development:
-In the [development branch](tree/development) the following are being worked on:
-- Base [`mpu6050`](blob/development/src/mpu6050.toit) class:
+In the [development branch](https://github.com/milkmansson/toit-mpu6050/tree/development)) the following are being worked on:
+- Base [`mpu6050`](https://github.com/milkmansson/toit-mpu6050/blob/development/src/mpu6050.toit) class:
   - Giving MPU6050 3 more axes:  The device has an auxiliary independent I2C bus,
     hosted on pins XDA/XCL.  They're designed to put an I2C magnetometer behind
     them to get full AHRS etc.  Whilst devices with magnetometers built-in already
@@ -40,7 +40,7 @@ In the [development branch](tree/development) the following are being worked on:
   - Free Fall - exists but not well tested yet.  (Needs a more robust build than
     a solderless breadboard.)
   - X/Y/Z Fine Gain Control.
-- DMP version [`mpu6050-dmp-ma612`](blob/development/src/mpu6050-dmp-ma612.toit) of the class:
+- DMP version [`mpu6050-dmp-ma612`](https://github.com/milkmansson/toit-mpu6050/blob/development/src/mpu6050-dmp-ma612.toit) of the class:
   - **DMP:** 'Digital Motion Processor' and 'Motion Fusion' features.  As the name
     implies, its being based on the MotionApps 6.12 sourced from
     [i2cdevlib](https://www.i2cdevlib.com/devices/mpu6050) and the work put in
