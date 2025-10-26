@@ -204,20 +204,6 @@ MPU6050 has a 1024 byte FIFO buffer which allows reads to occur in bursts.  This
 can be enabled using `enable-fifo-buffer` and `disable-fifo-buffer`.  More on
 this in a later version.
 
-## Undocumented Features
-The MPU6050 has allegedy many undocumented registers that the community knows
-and continues to use.  Functions that have been implemented based on these
-undocumented features are:
-- Freefall detection
-
-- DMP - Onboard 'Motion Processing'.  This was never fully documented but has
-  been undergoing reverse engineering by the community, which is still
-  incomplete.  A blob of several KB needs to be uploaded to the registers upon
-  power up.  I'm not 100% sure of embedding a blob and providing it here...
-  Instead for now I'll do my best for implementations using math on the ESP32
-  CPU.
-- Others...
-
 ### Sources
 Links to sources of information about its undocumented features:
 - [Arduino Forums Post 'Reverse Engineering Undocumented MPU6050 Registers'](https://forum.arduino.cc/t/reverse-engineering-undocumented-mpu6050-registers/698986/2)
