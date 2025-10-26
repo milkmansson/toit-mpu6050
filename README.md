@@ -182,7 +182,7 @@ mpu6050-driver.set-acceleration-wake-delay-ms 5
 At this point, the interrupt pin will fire once at the start of motion, and fire
 again when motion has stopped.  The following can be used to determine if either
 stopping or starting movement, using the statics `MOT-DETECT-MOT-TO-ZMOT` and `MOT-DETECT-ZMOT-TO-MOT` if required:
-```
+```Toit
 motdt-status = mpu6050-driver.get-motion-detect-status
 
 // Motion to Zero Motion (Stopping):
