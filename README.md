@@ -18,8 +18,10 @@ Dice'](https://github.com/milkmansson/project-dice) project.
 ## Feature Completeness
 This has gone a bit further than originally intended.  The tech in this chip is
 genuinely impressive, and going down this rabbit hole has been educational.
+Much of the coolest stuff is undocumented, and/or, like MotionApps, behind an
+agreement/wall with TDK that no longer exists.
 
-#### Current Version
+#### Current Version:
 As a baseline, the base class `Mpu6050` (in
 [`/src/mpu6050.toit`](src/mpu6050.toit)) contains any/all features without
 resorting to DMP/MotionApps.  Non-DMP (eg, in toit code in the driver/class)
@@ -27,7 +29,7 @@ implementations of features found in DMP funtions are also here.  It functions
 well so far for individual reads, interrupts, motion events, fifo, etc, even if
 it might be improved over time.
 
-#### Development
+#### Development:
 In the [development branch](tree/development) the following are being worked on:
 - Base [`mpu6050`](blob/development/src/mpu6050.toit) class:
   - Giving MPU6050 3 more axes:  The device has an auxiliary independent I2C bus,
@@ -35,6 +37,9 @@ In the [development branch](tree/development) the following are being worked on:
     them to get full AHRS etc.  Whilst devices with magnetometers built-in already
     exist, this is still a cheap and functional method.
   - Self-Test/Self-Calibration features
+  - Free Fall - exists but not well tested yet.  (Needs a more robust build than
+    a solderless breadboard.)
+  - X/Y/Z Fine Gain Control.
 - DMP version [`mpu6050-dmp-ma612`](blob/development/src/mpu6050-dmp-ma612.toit) of the class:
   - **DMP:** 'Digital Motion Processor' and 'Motion Fusion' features.  As the name
     implies, its being based on the MotionApps 6.12 sourced from
@@ -124,8 +129,65 @@ versa.  There are thresholds determining how much motion is necessary to trigger
 each of these.  Its a somewhat undocumented feature however it functions very
 well using information from the community. A simple example:
 ```Toit
+// I2C setup omitted
+// MOVEMENT DETECTION: Suggested starting values 20–40mg, for 20–50ms.
+STILL-TO-MOTION-MG := 40   // force required to register motion. Bigger value = more movement required.
+STILL-TO-MOTION-MS := 5    // duration of that force required to register motion. = Bigger value = movement required for longer.
 
+// STILL DETECTION: Suggested starting values 5–10mg, for 600ms.
+MOTION-TO-STILL-MG := 10   // forces on the device need to be less than this many milli-g's.
+MOTION-TO-STILL-MS := 576  // ... for at least this duration of milliseconds.
 
+// Configure Interrupt Pin, Defaults, and wake MPU6050
+interrupt-pin = gpio.Pin interrupt-pin-number --input  --pull-down
+mpu6050-driver.set-clock-source Mpu6050-dmp-ma612.CLOCK-SRC-INTERNAL-8MHZ
+mpu6050-driver.wakeup-now
+
+// Reset all internal signal paths
+mpu6050-driver.reset-gyroscope
+mpu6050-driver.reset-accelerometer
+mpu6050-driver.reset-temperature
+
+// Disable Unused Bits
+mpu6050-driver.disable-temperature
+mpu6050-driver.disable-gyroscope
+
+// Configure Digital High Pass Filter - so slow tilt doesn’t look like motion.
+mpu6050-driver.set-accelerometer-high-pass-filter Mpu6050-dmp-ma612.ACCEL-HPF-0-63HZ
+
+// Set Zero-Motion to Motion Detection (ms = milliseconds, mg=milli G's)
+mpu6050-driver.set-motion-detection-duration-ms STILL-TO-MOTION-MS
+mpu6050-driver.set-motion-detection-threshold-mg STILL-TO-MOTION-MG
+mpu6050-driver.enable-interrupt-motion-detection
+
+// Set Motion to Zero Motion Detection (ms = milliseconds, mg=milli G's)
+mpu6050-driver.set-zero-motion-detection-duration-ms MOTION-TO-STILL-MS
+mpu6050-driver.set-zero-motion-detection-threshold-mg MOTION-TO-STILL-MG
+mpu6050-driver.enable-interrupt-zero-motion-detection
+
+// Set interrupt pin to go high when activated
+mpu6050-driver.set-interrupt-pin-active-high
+mpu6050-driver.disable-fsync-pin
+
+// Set up interaction - keep pin active until values read.
+mpu6050-driver.enable-interrupt-pin-latching
+mpu6050-driver.set-interrupt-pin-read-clears
+mpu6050-driver.set-dlpf-config Mpu6050-dmp-ma612.CONFIG-DLPF-3
+
+// Set decrement rates and delay for freefall and motion detection
+mpu6050-driver.set-motion-detection-count-decrement-rate 1
+mpu6050-driver.set-free-fall-count-decrement-rate 1
+mpu6050-driver.set-acceleration-wake-delay-ms 5
+```
+At this point, the interrupt pin will fire once at the start of motion, and fire
+again when motion has stopped.  The following can be used to determine if either
+stopping or starting movement, using the statics `MOT-DETECT-MOT-TO-ZMOT` and `MOT-DETECT-ZMOT-TO-MOT` if required:
+```
+motdt-status = mpu6050-driver.get-motion-detect-status
+
+// Motion to Zero Motion (Stopping):
+if (motdt-status & Mpu6050-dmp-ma612.MOT-DETECT-MOT-TO-ZMOT) != 0:
+  print "  Motion stopping..."
 ```
 
 ### Temperature gauge
@@ -139,18 +201,15 @@ print " get-temperature: $(%0.3f driver.read-temperature)c"  // e.g.  24.213c
 
 ### FIFO Buffer
 MPU6050 has a 1024 byte FIFO buffer which allows reads to occur in bursts.  This
-can be enabled using `enable-fifo-buffer` and `disable-fifo-buffer`.  If using
-this mode,  :
-```
-
-```
+can be enabled using `enable-fifo-buffer` and `disable-fifo-buffer`.  More on
+this in a later version.
 
 ## Undocumented Features
 The MPU6050 has allegedy many undocumented registers that the community knows
 and continues to use.  Functions that have been implemented based on these
 undocumented features are:
 - Freefall detection
-- X/Y/Z Fine Gain Control
+
 - DMP - Onboard 'Motion Processing'.  This was never fully documented but has
   been undergoing reverse engineering by the community, which is still
   incomplete.  A blob of several KB needs to be uploaded to the registers upon
@@ -164,40 +223,6 @@ Links to sources of information about its undocumented features:
 - [Arduino Forums Post 'Reverse Engineering Undocumented MPU6050 Registers'](https://forum.arduino.cc/t/reverse-engineering-undocumented-mpu6050-registers/698986/2)
 - [MPU6050 register list on I2CDevLib.com](https://www.i2cdevlib.com/devices/mpu6050#registers)
 
-## Experimental Features
-Whilst I expect these won't be useful to anyone, I've used the MPU6050 for a
-couple of other features/outcomes/reasons in the past:
-
-### Linear Acceleration/Magnitude
-By using the accelerometer output a magnitude vector can be established of the
-total force (in whatever direction, as opposed to trying to track the size in three
-dimensions simultaneously).
-```Toit
-// I2C setup omitted
-mpu6050-driver.magnitude mpu6050-driver.read-acceleration
-
-// eg
-```
-
-This value, combined with pitch roll and yaw is with some values indicating direction.  To account for
-these values together there is a separate object, as a Toit-native 'set' cannot
-contain floats.  Ensure you configure the range to suit your expected strength,
-and note that yaw is undefined from acceleration alone - the value is kept at
-null.
-```Toit
-// I2C setup omitted
-
-// Set expected range (in g's) from 2, 4, 8 or 16, using the constants.
-mpu6050-driver.set-accel-fs ACCEL-FS-RANGE-8G
-object := mpu6050-driver.read-acceleration-vector
-
-// Print single measurement
-300.repeat:
-  print "$(%0.2f object.magnitude)g"
-  sleep --ms=100
-```
-Note that with very slow gentle movement, the magnitude value stays pretty close
-to 1, in whatever direction that it comes to rest.  The other values (pitch/roll) change to show the movement direction in 3 dimensions (roll/pitch/yaw).
 
 ## Links
 - [MPU6050 Explained](https://mjwhite8119.github.io/Robots/mpu6050) an excellent
