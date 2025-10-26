@@ -201,8 +201,7 @@ print " get-temperature: $(%0.3f driver.read-temperature)c"  // e.g.  24.213c
 
 ### FIFO Buffer
 MPU6050 has a 1024 byte FIFO buffer which allows reads to occur in bursts.  This
-can be enabled using `enable-fifo-buffer` and `disable-fifo-buffer`.  More on
-this in a later version.
+can be enabled using `enable-fifo-buffer` and `disable-fifo-buffer`.  This functions well, and is used for DMP, but more on this soon.
 
 ### Sources
 Links to sources of information about its undocumented features:
