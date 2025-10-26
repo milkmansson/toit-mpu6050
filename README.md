@@ -10,10 +10,50 @@ motion detection, orientation sensing, or gesture control.
 > [!WARNING]
 > This device is allegedly obsolete.  It is quoted as being noisy and outdated.
 > However they are still cheap, widely available, and good enough for many
-> projects such as mine, making the driver worth the time to write.
+> projects such as mine, making a driver worth the time to write.
 
 A practical implementation of this device is shown in this ['Digital
 Dice'](https://github.com/milkmansson/project-dice) project.
+
+## Feature Completeness
+This has gone a bit further than originally intended.  The tech in this chip is
+genuinely impressive, and going down this rabbit hole has been educational.
+
+#### Current Version
+As a baseline, the base class `Mpu6050` (in
+[`/src/mpu6050.toit`](src/mpu6050.toit)) contains any/all features without
+resorting to DMP/MotionApps.  Non-DMP (eg, in toit code in the driver/class)
+implementations of features found in DMP funtions are also here.  It functions
+well so far for individual reads, interrupts, motion events, fifo, etc, even if
+it might be improved over time.
+
+#### Development
+In the [development branch](tree/development) the following are being worked on:
+- Base [`mpu6050`](blob/development/src/mpu6050.toit) class:
+  - Giving MPU6050 3 more axes:  The device has an auxiliary independent I2C bus,
+    hosted on pins XDA/XCL.  They're designed to put an I2C magnetometer behind
+    them to get full AHRS etc.  Whilst devices with magnetometers built-in already
+    exist, this is still a cheap and functional method.
+  - Self-Test/Self-Calibration features
+- DMP version [`mpu6050-dmp-ma612`](blob/development/src/mpu6050-dmp-ma612.toit) of the class:
+  - **DMP:** 'Digital Motion Processor' and 'Motion Fusion' features.  As the name
+    implies, its being based on the MotionApps 6.12 sourced from
+    [i2cdevlib](https://www.i2cdevlib.com/devices/mpu6050) and the work put in
+    at [Jeff Rowberg's
+    repo](https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050). Status: in progress.
+      - 'Tap' Gesture is underway, 'Step Counter' is next.
+  - **FIFO buffer:** This currently works, although consuming the information
+    from it, and controlling the rates and sources of inforation appearing in it
+    is still not quite there.  It features strongly in how DMP features are
+    consumed, so is actively being worked on.
+  - **Full AHRS implementation:** This was interesting and expectation is that
+    this will be completely possible.  Status: Some time away for now.  See:
+    [Open Source IMU and AHRS
+    algorithms](https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/) and
+    [Fusion Library](https://github.com/xioTechnologies/Fusion)
+  - **Calibration:** Much better features and capabilities exist when using DMP.
+    This is also being surfaced.
+
 
 ## Features
 
@@ -128,7 +168,7 @@ Links to sources of information about its undocumented features:
 Whilst I expect these won't be useful to anyone, I've used the MPU6050 for a
 couple of other features/outcomes/reasons in the past:
 
-### Magnitude
+### Linear Acceleration/Magnitude
 By using the accelerometer output a magnitude vector can be established of the
 total force (in whatever direction, as opposed to trying to track the size in three
 dimensions simultaneously).
@@ -158,15 +198,6 @@ object := mpu6050-driver.read-acceleration-vector
 ```
 Note that with very slow gentle movement, the magnitude value stays pretty close
 to 1, in whatever direction that it comes to rest.  The other values (pitch/roll) change to show the movement direction in 3 dimensions (roll/pitch/yaw).
-
-## Features not implemented yet
-- MPU6050 as an auxiliary independent I2C bus, hosted on pins XDA/XCL.  Whilst
-  this device is small/affordable, similar devices with magnetometers already
-  built-in already exist and are easily available.
-- Self-Test
-- DMP - 'Digital Motion Processor' and 'Motion Fusion' features
-- 1024 Byte FIFO buffer
-- Full AHRS implementation. See: [Open Source IMU and AHRS algorithms](https://x-io.co.uk/open-source-imu-and-ahrs-algorithms/) and [Fusion Library](https://github.com/xioTechnologies/Fusion)
 
 ## Links
 - [MPU6050 Explained](https://mjwhite8119.github.io/Robots/mpu6050) an excellent

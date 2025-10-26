@@ -483,7 +483,7 @@ class Mpu6050-dmp-ma612 extends Mpu6050:
     enable-fifo
 
     // 0000 0010 INT_ENABLE: RAW_DMP_INT_EN on
-    //enable-interrupt-dmp
+    enable-interrupt-dmp
 
     set-sample-rate-hz 200
 
@@ -575,7 +575,6 @@ class Mpu6050-dmp-ma612 extends Mpu6050:
 
 
   read-accelerometer-dmp --set/Point3i=(read-accelerometer-dmp-raw) -> Point3f:
-
     accel-x := set.x.to-float / accel-lsb-per-g_
     accel-y := set.y.to-float / accel-lsb-per-g_
     accel-z := set.z.to-float / accel-lsb-per-g_
@@ -635,7 +634,7 @@ class Mpu6050-dmp-ma612 extends Mpu6050:
 
   read-quaternion-dmp --set/Vector4i=(read-quaternion-dmp-raw) -> Vector4f:
     q30-s := 1073741824.0  // 2^30
-    quat-w := set.x.to-float / q30-s
+    quat-w := set.w.to-float / q30-s
     quat-x := set.x.to-float / q30-s
     quat-y := set.y.to-float / q30-s
     quat-z := set.z.to-float / q30-s
@@ -782,29 +781,36 @@ class Mpu6050-dmp-ma612 extends Mpu6050:
 
   // Read N bytes from a linear address, crossing banks safely.
   dmp-read-bytes_ --address/int --length/int -> ByteArray:
-    out := ByteArray length
+    output := ByteArray length
     bank := dmp-bank_ address
     offset := dmp-offset_ address
+
+    // Open Output Array
     bytes/ByteArray := #[]
+
     i := 0
     while i < length:
       set-mem-write-bank_ bank
       set-mem-write-offset_ offset
+
       room := 256 - offset
       chunk := DMP-MEM-CHUNK-SIZE_
       rem := length - i
       if chunk > rem:  chunk = rem
       if chunk > room: chunk = room
+
       bytes = reg_.read-bytes REG-MEM-R-W_ chunk
-      // copy
+
+      // copy to output variable
       k := 0
       while k < chunk:
-        out[i + k] = bytes[k]
+        output[i + k] = bytes[k]
         k += 1
       i += chunk
       offset = (offset + chunk) & 0xFF
       if offset == 0 and i < length: bank += 1
-    return out
+
+    return output
 
 /*
 
@@ -1173,28 +1179,20 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
     return address & 0xFF
 
   dmp-write-16-be_ address/int value/int -> none:
-    set-mem-write-bank_ (dmp-bank_ address)
-    set-mem-write-offset_ (dmp-offset_ address)
     hi-byte := (value >> 8) & 0xFF
     lo-byte := value & 0xFF
-    reg_.write-bytes REG-MEM-R-W_ #[hi-byte, lo-byte]
+    dmp-write-bytes_ #[hi-byte, lo-byte] --address=address --verify
 
   dmp-read-16-be_ address/int -> int:
-    set-mem-write-bank_ (dmp-bank_ address)
-    set-mem-write-offset_ (dmp-offset_ address)
-    bytes := reg_.read-bytes REG-MEM-R-W_ 2
+    bytes := dmp-read-bytes_ --address=address --length=2
     return i16-be_ bytes[0] bytes[1]
 
   dmp-write-8_ address/int value/int -> none:
-    set-mem-write-bank_ (dmp-bank_ address)
-    set-mem-write-offset_ (dmp-offset_ address)
-    reg_.write-bytes REG-MEM-R-W_ #[ value & 0xFF ]
+    dmp-write-bytes_ #[ value & 0xFF ] --address=address --verify
 
   dmp-read-8_ address/int -> int:
-    set-mem-write-bank_ (dmp-bank_ address)
-    set-mem-write-offset_ (dmp-offset_ address)
-    b := reg_.read-bytes REG-MEM-R-W_ 1
-    return b[0] & 0xFF
+    bytes := dmp-read-bytes_ --address=address --length=1
+    return bytes[0] & 0xFF
 
   // Bitmask for axes the DMP tap engine should watch
   static TAP-AXIS-X-POS_ ::= 0b00000001
@@ -1205,19 +1203,19 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
   static TAP-AXIS-Z-NEG_ ::= 0b00100000
 
   // DMP memory map (MotionApps 6.12)
-  static DMP-MEM-TAP-TIMER_   ::= 466	// Type 16-bit BE  // Description Single-tap time window (typically µs units)
-  static DMP-MEM-TAP-THX_     ::= 468   // Type 16-bit BE  // Description X-axis tap threshold
-  static DMP-MEM-TAP-THY_     ::= 472   // Type 16-bit BE  // Description Y-axis tap threshold
-  static DMP-MEM-TAP-THZ_     ::= 476   // Type 16-bit BE  // Description Z-axis tap threshold
-  static DMP-MEM-TAPW-MIN_    ::= 478   // Type 16-bit BE  // Description Multi-tap window (double/quad)
-  static DMP-MEM-SH-TH-X_     ::= 436   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
-  static DMP-MEM-SH-TH-Y_     ::= 440   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
-  static DMP-MEM-SH-TH-Z_     ::= 444   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
-  static DMP-MEM-ORIENT_      ::= 488   // Type 16-bit BE  // Android-orientation config/status (depends on build)
-  static DMP-MEM-TAP-AXES-EN_ ::= 328   // Type 8-bit
-  static DMP-MEM-TAP-DEADTIME_ ::= 474  // Type 8-bit
-  static DMP-MEM-TAP-MULTI-WINDOW_ ::= 478
-  static DMP-MEM-TAP-MIN-COUNT_ ::= 335
+  static DMP-MEM-TAP-TIMER_     ::= 466	  // Type 16-bit BE  // Description Single-tap time window (typically µs units)
+  static DMP-MEM-TAP-TH-X_      ::= 468   // Type 16-bit BE  // Description X-axis tap threshold
+  static DMP-MEM-TAP-TH-Y_      ::= 472   // Type 16-bit BE  // Description Y-axis tap threshold
+  static DMP-MEM-TAP-TH-Z_      ::= 476   // Type 16-bit BE  // Description Z-axis tap threshold
+  static DMP-MEM-TAPW-MIN_      ::= 478   // Type 16-bit BE  // Description Multi-tap window (double/quad)
+  static DMP-MEM-SH-TH-X_       ::= 436   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
+  static DMP-MEM-SH-TH-Y_       ::= 440   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
+  static DMP-MEM-SH-TH-Z_       ::= 444   // Type 16-bit BE  // 'Shake' thresholds (used by orient gestures)
+  static DMP-MEM-ORIENT_        ::= 488   // Type 16-bit BE  // Android-orientation config/status (depends on build)
+  static DMP-MEM-TAP-AXES-EN_   ::= 328   // Type 8-bit
+  static DMP-MEM-TAP-DEADTIME_  ::= 474   // Type 8-bit
+  static DMP-MEM-TAP-MULTI-WINDOW_  ::= 478
+  static DMP-MEM-TAP-MIN-COUNT_     ::= 335
   static DMP-MEM-CFG-FIFO-ON-EVENT_ ::= 2690
 
   static INT-SRC-TAP_ ::= 0x01
@@ -1236,31 +1234,34 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
     enable-interrupt-dmp
 
     set-tap-axes (TAP-AXIS-X-POS_ | TAP-AXIS-X-NEG_ | TAP-AXIS-Y-POS_ | TAP-AXIS-Y-NEG_ | TAP-AXIS-Z-POS_ | TAP-AXIS-Z-NEG_)
-    set-tap-threshold (Point3i 250 250 250)    // 250 mg
-    set-tap-deadtime-ms 100       // minimum time between taps on same axis
-    set-tap-multi-window-ms 300   // max window to accumulate double/quad taps
+    set-tap-threshold (Point3i 25 25 25)    // 250 mg
+    set-tap-deadtime-ms 50       // minimum time between taps on same axis
+    set-tap-multi-window-ms 500   // max window to accumulate double/quad taps
     set-tap-min-count 1
 
   set-tap-axes mask/int -> none:
-    en := 0
-    if (mask & (TAP-AXIS-X-POS_ | TAP-AXIS-X-NEG_)) != 0: en |= 0x30
-    if (mask & (TAP-AXIS-Y-POS_ | TAP-AXIS-Y-NEG_)) != 0: en |= 0x0C
-    if (mask & (TAP-AXIS-Z-POS_ | TAP-AXIS-Z-NEG_)) != 0: en |= 0x03
-    dmp-write-8_ DMP-MEM-TAP-AXES-EN_ en
+    //en := 0
+    //if (mask & (TAP-AXIS-X-POS_ | TAP-AXIS-X-NEG_)) != 0: en |= 0x30
+    //if (mask & (TAP-AXIS-Y-POS_ | TAP-AXIS-Y-NEG_)) != 0: en |= 0x0C
+    //if (mask & (TAP-AXIS-Z-POS_ | TAP-AXIS-Z-NEG_)) != 0: en |= 0x03
+    //dmp-write-8_ DMP-MEM-TAP-AXES-EN_ en
+
+    // 6 LSBs are the +/- axis enables. First attempt was a guess so try with all on:
+    dmp-write-8_ DMP-MEM-TAP-AXES-EN_ 0x3F
 
   // Start conservative; you can tune after first taps register
   tap-threshold-mg-to-lsb mg/int -> int:
     return clamp-value_ (mg / 32) --lower=1 --upper=255
 
   set-tap-threshold value-mg/Point3i -> none:
-    if (value-mg.x != null): dmp-write-8_ DMP-MEM-TAP-THX_ (tap-threshold-mg-to-lsb value-mg.x)
-    if (value-mg.y != null): dmp-write-8_ DMP-MEM-TAP-THX_ (tap-threshold-mg-to-lsb value-mg.y)
-    if (value-mg.z != null): dmp-write-8_ DMP-MEM-TAP-THX_ (tap-threshold-mg-to-lsb value-mg.z)
+    if (value-mg.x != null): dmp-write-8_ DMP-MEM-TAP-TH-X_ (tap-threshold-mg-to-lsb value-mg.x)
+    if (value-mg.y != null): dmp-write-8_ DMP-MEM-TAP-TH-Y_ (tap-threshold-mg-to-lsb value-mg.y)
+    if (value-mg.z != null): dmp-write-8_ DMP-MEM-TAP-TH-Z_ (tap-threshold-mg-to-lsb value-mg.z)
 
   // Many builds expect microseconds in a 16-bit big-endian field.
   set-tap-deadtime-ms ms/int -> none:
-    us := clamp-value_ (ms * 1000) --lower=0 --upper=65535
-    dmp-write-16-be_ DMP-MEM-TAP-DEADTIME_ us
+    ms-ish := clamp-value_ (ms) --lower=1 --upper=255
+    dmp-write-8_ DMP-MEM-TAP-DEADTIME_ ms-ish
 
   set-tap-multi-window-ms ms/int -> none:
     us := clamp-value_ (ms * 1000) --lower=0 --upper=65535
@@ -1269,6 +1270,16 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
   set-tap-min-count count/int -> none:
     count = clamp-value_ count --lower=1 --upper=4
     dmp-write-8_ DMP-MEM-TAP-MIN-COUNT_ (count - 1) // zero based
+
+  abs x/any -> any:
+    if x is int:
+      x < 0 ? return (x * -1) : return x
+    if x is float:
+      x < 0.0 ? return (x * -1.0) : return x
+
+    logger_.error "abs: don't know how to deal with variable type." --tags={"value":x}
+    throw "abs: don't know how to deal with variable type."
+    return 0.0
 
   /**
   Read gesture information from one packet.
@@ -1330,7 +1341,7 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
 
 */
 
-/*
+
   // Compute gravity unit vector (in body frame) from a unit quaternion q = (w,x,y,z).
   gravity-from-quaternion q/Vector4f -> Point3f:
     w := q.x     // if your Vector4f is (w,x,y,z): q.x is w, q.y is x, etc.
@@ -1340,12 +1351,14 @@ uint8_t MPU6050::dmpGetCurrentFIFOPacket(uint8_t *data) { // overflow proof
 
     // Optional: normalize once, in case q isn't strictly unit length.
     norm2 := w*w + x*x + y*y + z*z
-    if (norm2 != 0.0) and abs (norm2 - 1.0) > 1e-5:
+    if (norm2 != 0.0) and ((abs (norm2 - 1.0)) > 1e-5):
       inv := 1.0 / (sqrt norm2)
-      w *= inv; x *= inv; y *= inv; z *= inv
+      w *= inv
+      x *= inv
+      y *= inv
+      z *= inv
 
     gx := 2.0 * (x*z - w*y)
     gy := 2.0 * (w*x + y*z)
     gz := w*w - x*x - y*y + z*z
     return Point3f gx gy gz
-*/

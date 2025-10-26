@@ -1321,6 +1321,8 @@ class Mpu6050:
   Clamps the supplied value to specified limit.
   */
   clamp-value_ value/any --upper/any?=null --lower/any?=null -> any:
+    if (upper != null) and (lower != null):
+      assert: upper > lower
     if upper != null: if value > upper:  return upper
     if lower != null: if value < lower:  return lower
     return value
