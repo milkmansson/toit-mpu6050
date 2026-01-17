@@ -1315,8 +1315,6 @@ class Mpu6050:
       signed ? reg_.write-i16-be register new-value : reg_.write-u16-be register new-value
       return
 
-    throw "write-register_: Unhandled Circumstance."
-
   /**
   Clamps the supplied value to specified limit.
   */
