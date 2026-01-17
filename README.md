@@ -5,7 +5,7 @@ linear acceleration and rotational velocity.  They communicate via I²C (or SPI
 depending on model).  It's a cheap and popular choice for projects that need
 motion detection, orientation sensing, or gesture control.
 
-![Front and back of an as5600](images/mpu6050.jpg)
+![Front and back of an mpu6050](images/mpu6050.jpg)
 
 > [!WARNING]
 > This device is allegedly obsolete.  It is quoted as being noisy and outdated.
